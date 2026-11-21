@@ -494,8 +494,7 @@ contract RewardDropTest is Test {
         uint64 t = _commit(alice);
         uint256 amt = _settle(alice, t, bh);
         assertTrue(
-            amt == 0.05e18 || amt == 0.08e18 || amt == 0.12e18 || amt == 0.15e18
-                || amt == 0.2e18
+            amt == 0.05e18 || amt == 0.08e18 || amt == 0.12e18 || amt == 0.15e18 || amt == 0.2e18
         );
     }
 
@@ -702,8 +701,15 @@ contract RewardDropTest is Test {
             drop.voucherDigest(keccak256("alice"), alice, post, acct, 123),
             keccak256(abi.encodePacked("\x19\x01", ds, sh))
         );
-        (bytes1 fields, string memory name, string memory version, uint256 cid, address vc,
-            bytes32 salt, uint256[] memory ext) = drop.eip712Domain();
+        (
+            bytes1 fields,
+            string memory name,
+            string memory version,
+            uint256 cid,
+            address vc,
+            bytes32 salt,
+            uint256[] memory ext
+        ) = drop.eip712Domain();
         assertEq(fields, bytes1(0x0f));
         assertEq(name, "ProofQuest RewardDrop");
         assertEq(version, "1");
@@ -722,7 +728,8 @@ contract RewardDropTest is Test {
     function test_RevertWhen_Voucher_WrongSigner() public {
         (, uint256 badPk) = makeAddrAndKey("attacker");
         V memory v = _v(drop, alice);
-        v.sig = _sign(badPk, drop.voucherDigest(keccak256("alice"), alice, v.post, v.acct, v.deadline));
+        v.sig =
+            _sign(badPk, drop.voucherDigest(keccak256("alice"), alice, v.post, v.acct, v.deadline));
         vm.prank(alice);
         vm.expectRevert(RewardDrop.InvalidSignature.selector);
         drop.commitClaim(v.post, v.acct, v.deadline, v.sig);
@@ -765,7 +772,9 @@ contract RewardDropTest is Test {
     function test_RevertWhen_Voucher_RightUserWrongHandle() public {
         // signed for alice's address but bob's handle hash
         V memory v = _v(drop, alice);
-        v.sig = _sign(signerPk, drop.voucherDigest(keccak256("bob"), alice, v.post, v.acct, v.deadline));
+        v.sig = _sign(
+            signerPk, drop.voucherDigest(keccak256("bob"), alice, v.post, v.acct, v.deadline)
+        );
         vm.prank(alice);
         vm.expectRevert(RewardDrop.InvalidSignature.selector);
         drop.commitClaim(v.post, v.acct, v.deadline, v.sig);
@@ -776,9 +785,8 @@ contract RewardDropTest is Test {
         vm.prank(alice);
         drop.commitClaim(va.post, va.acct, va.deadline, va.sig);
         bytes32 acct2 = keccak256(bytes("999"));
-        bytes memory sig = _sign(
-            signerPk, drop.voucherDigest(keccak256("bob"), bob, va.post, acct2, va.deadline)
-        );
+        bytes memory sig =
+            _sign(signerPk, drop.voucherDigest(keccak256("bob"), bob, va.post, acct2, va.deadline));
         vm.prank(bob);
         vm.expectRevert(RewardDrop.PostAlreadyUsed.selector);
         drop.commitClaim(va.post, acct2, va.deadline, sig);
@@ -789,9 +797,8 @@ contract RewardDropTest is Test {
         vm.prank(alice);
         drop.commitClaim(va.post, va.acct, va.deadline, va.sig);
         bytes32 post2 = keccak256(bytes("1858999"));
-        bytes memory sig = _sign(
-            signerPk, drop.voucherDigest(keccak256("bob"), bob, post2, va.acct, va.deadline)
-        );
+        bytes memory sig =
+            _sign(signerPk, drop.voucherDigest(keccak256("bob"), bob, post2, va.acct, va.deadline));
         vm.prank(bob);
         vm.expectRevert(RewardDrop.AccountAlreadyUsed.selector);
         drop.commitClaim(post2, va.acct, va.deadline, sig);

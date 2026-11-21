@@ -120,10 +120,14 @@ contract QuestRewardsTest is Test {
 
     // ---------------------------------------------------------- permissionless publishing
 
-    function _publish(address who, QuestRewards.Mode m, uint256 amt, uint32 n, uint64 end, uint256 budget)
-        internal
-        returns (uint256 id)
-    {
+    function _publish(
+        address who,
+        QuestRewards.Mode m,
+        uint256 amt,
+        uint32 n,
+        uint64 end,
+        uint256 budget
+    ) internal returns (uint256 id) {
         usdt.mint(who, budget);
         vm.startPrank(who);
         usdt.approve(address(qr), budget); // exact amount, never unlimited
@@ -139,7 +143,9 @@ contract QuestRewardsTest is Test {
     function test_Publish_AnyAgentIdHolderCreatesAndFundsInOneTx() public {
         _minBudget5();
         uint256 before = usdt.balanceOf(address(qr));
-        uint256 id = _publish(alice, QuestRewards.Mode.FCFS, 10 * CENT, 50, uint64(block.timestamp + 1 days), 5 * E18);
+        uint256 id = _publish(
+            alice, QuestRewards.Mode.FCFS, 10 * CENT, 50, uint64(block.timestamp + 1 days), 5 * E18
+        );
         assertEq(qr.creatorOf(id), alice);
         assertEq(qr.getCampaign(id).balance, 5 * E18);
         assertEq(usdt.balanceOf(address(qr)) - before, 5 * E18);
@@ -168,7 +174,8 @@ contract QuestRewardsTest is Test {
         usdt.approve(address(qr), 1 * E18);
         vm.expectRevert(QuestRewards.BudgetTooLow.selector);
         qr.createQuest(QuestRewards.Mode.FCFS, 10 * CENT, 10, 0, POST, "x", 1 * E18 - 1);
-        uint256 id = qr.createQuest(QuestRewards.Mode.FCFS, 10 * CENT, 10, 0, POST, "one dollar", 1 * E18);
+        uint256 id =
+            qr.createQuest(QuestRewards.Mode.FCFS, 10 * CENT, 10, 0, POST, "one dollar", 1 * E18);
         vm.stopPrank();
         assertEq(qr.remainingSlots(id), 10);
         address[11] memory us;
@@ -293,7 +300,9 @@ contract QuestRewardsTest is Test {
 
     function test_Creator_WithdrawOnlyAfterEndOrWhenPaused() public {
         _minBudget5();
-        uint256 id = _publish(alice, QuestRewards.Mode.FCFS, 10 * CENT, 50, uint64(block.timestamp + 1 days), 5 * E18);
+        uint256 id = _publish(
+            alice, QuestRewards.Mode.FCFS, 10 * CENT, 50, uint64(block.timestamp + 1 days), 5 * E18
+        );
         vm.prank(alice);
         vm.expectRevert(QuestRewards.StillActive.selector);
         qr.withdrawCampaignLeftover(id, 1, alice);
@@ -372,7 +381,7 @@ contract QuestRewardsTest is Test {
 
     function test_Isolation_ClaimsOnlyDebitOwnQuest() public {
         _minBudget5();
-        uint256 a = _publish(alice, QuestRewards.Mode.FCFS, 50 * CENT, 100, 0, 5 * E18);  // 10 slots by budget
+        uint256 a = _publish(alice, QuestRewards.Mode.FCFS, 50 * CENT, 100, 0, 5 * E18); // 10 slots by budget
         uint256 b = _publish(bob, QuestRewards.Mode.FCFS, 10 * CENT, 100, 0, 5 * E18);
         uint256 total = qr.totalCampaignBalance();
         // drain quest a completely
@@ -430,7 +439,9 @@ contract QuestRewardsTest is Test {
         qr.fundCampaign(id, 1 * E18);
         qr.setCampaignPaused(id, true);
         vm.stopPrank();
-        usdt.setReenter(address(qr), abi.encodeCall(QuestRewards.withdrawCampaignLeftover, (id, 1, owner)));
+        usdt.setReenter(
+            address(qr), abi.encodeCall(QuestRewards.withdrawCampaignLeftover, (id, 1, owner))
+        );
         vm.prank(owner);
         vm.expectRevert(); // inner call hits the nonReentrant guard
         qr.withdrawCampaignLeftover(id, 1 * E18, owner);
@@ -578,7 +589,8 @@ contract QuestRewardsTest is Test {
         q2.fundCampaign(id, E18);
         vm.stopPrank();
         bytes32 h = q2.handleKey("alice");
-        bytes32 d = q2.voucherDigest(id, h, alice, bytes32("p1"), bytes32("a1"), block.timestamp + 60);
+        bytes32 d =
+            q2.voucherDigest(id, h, alice, bytes32("p1"), bytes32("a1"), block.timestamp + 60);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPk, d);
         vm.prank(alice);
         q2.claim(id, bytes32("p1"), bytes32("a1"), block.timestamp + 60, abi.encodePacked(r, s, v));
@@ -725,7 +737,9 @@ contract QuestRewardsTest is Test {
 
     function test_CampaignEnded() public {
         vm.prank(owner);
-        uint256 id = qr.createQuest(QuestRewards.Mode.FCFS, CENT, 5, uint64(block.timestamp + 100), POST, "short", 0);
+        uint256 id = qr.createQuest(
+            QuestRewards.Mode.FCFS, CENT, 5, uint64(block.timestamp + 100), POST, "short", 0
+        );
         vm.prank(owner);
         qr.fundCampaign(id, E18);
         vm.warp(block.timestamp + 101);
@@ -768,7 +782,10 @@ contract QuestRewardsTest is Test {
         vm.prank(alice);
         uint256 amt = qr.settle(rid);
         assertEq(usdt.balanceOf(alice) - before, amt);
-        assertTrue(amt == 5 * CENT || amt == 8 * CENT || amt == 12 * CENT || amt == 15 * CENT || amt == 20 * CENT);
+        assertTrue(
+            amt == 5 * CENT || amt == 8 * CENT || amt == 12 * CENT || amt == 15 * CENT
+                || amt == 20 * CENT
+        );
         QuestRewards.Campaign memory c = qr.getCampaign(rid);
         assertEq(c.reserved, 0);
         assertEq(c.balance, 10 * E18 - amt);
@@ -859,7 +876,9 @@ contract QuestRewardsTest is Test {
 
     function test_RandomSeedDependsOnCampaign() public view {
         bytes32 bh = keccak256("bh");
-        assertTrue(qr.randomSeed(1, bh, alice, bytes32(0)) != qr.randomSeed(2, bh, alice, bytes32(0)));
+        assertTrue(
+            qr.randomSeed(1, bh, alice, bytes32(0)) != qr.randomSeed(2, bh, alice, bytes32(0))
+        );
     }
 
     // ---------------------------------------------------------- owner money

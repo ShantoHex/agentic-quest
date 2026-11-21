@@ -21,7 +21,8 @@ contract MainnetRegistryForkTest is Test {
         deal(USDT, owner, 5e18);
         vm.startPrank(owner);
         qr.setSigner(makeAddr("signer"));
-        (bool s,) = USDT.call(abi.encodeWithSignature("approve(address,uint256)", address(qr), 5e18));
+        (bool s,) =
+            USDT.call(abi.encodeWithSignature("approve(address,uint256)", address(qr), 5e18));
         assertTrue(s);
         qr.createQuest(QuestRewards.Mode.FCFS, 1e17, 10, 0, "", "fork", 5e18); // owner: no Agent ID needed
         vm.stopPrank();

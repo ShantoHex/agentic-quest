@@ -182,7 +182,9 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         uint256 amount,
         Mode mode
     );
-    event ClaimExpiredFallback(uint256 indexed id, bytes32 indexed handleHash, address indexed user);
+    event ClaimExpiredFallback(
+        uint256 indexed id, bytes32 indexed handleHash, address indexed user
+    );
     event LeftoverWithdrawn(uint256 indexed id, address indexed to, uint256 amount);
     event UnallocatedWithdrawn(address indexed to, uint256 amount);
     event SignerUpdated(address indexed oldSigner, address indexed newSigner);
@@ -409,7 +411,10 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
 
     /// @notice Creator withdraws their quest's unreserved funds. Allowed after the end time,
     ///         or while the quest is paused or blocked, or while the platform is paused.
-    function withdrawCampaignLeftover(uint256 id, uint256 amount, address to) external nonReentrant {
+    function withdrawCampaignLeftover(uint256 id, uint256 amount, address to)
+        external
+        nonReentrant
+    {
         Campaign storage c = _campaign(id);
         _onlyCreator(id);
         if (to == address(0)) revert ZeroAddress();
@@ -433,7 +438,10 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
     }
 
     /// @notice Configure permissionless creation. `minBudget_` is capped at 1,000,000 tokens.
-    function setCreationConfig(bool open, bool needsAgentId, uint256 minBudget_) external onlyOwner {
+    function setCreationConfig(bool open, bool needsAgentId, uint256 minBudget_)
+        external
+        onlyOwner
+    {
         if (minBudget_ > 1_000_000 * 10 ** uint256(tokenDecimals)) revert BadParams();
         creationOpen = open;
         creatorNeedsAgentId = needsAgentId;
@@ -501,7 +509,11 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
 
     /// @notice Whether `user` can call {claim} on campaign `id` now, with a reason if not.
     ///         (X post / account checks happen on the voucher server and in {claim}.)
-    function canClaim(uint256 id, address user) external view returns (bool ok, string memory reason) {
+    function canClaim(uint256 id, address user)
+        external
+        view
+        returns (bool ok, string memory reason)
+    {
         if (id == 0 || id > campaignCount) return (false, "unknown campaign");
         Campaign storage c = _campaigns[id];
         if (paused) return (false, "paused");
@@ -548,7 +560,8 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         view
         returns (uint256)
     {
-        return uint256(keccak256(abi.encode(bh, user, handleHash, id, address(this), block.chainid)));
+        return
+            uint256(keccak256(abi.encode(bh, user, handleHash, id, address(this), block.chainid)));
     }
 
     function tierFor(uint256 seed) public view returns (uint256) {
@@ -577,7 +590,9 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         uint256 deadline
     ) public pure returns (bytes32) {
         return keccak256(
-            abi.encode(VOUCHER_TYPEHASH, id, handleHash, user, xPostIdHash, xAccountIdHash, deadline)
+            abi.encode(
+                VOUCHER_TYPEHASH, id, handleHash, user, xPostIdHash, xAccountIdHash, deadline
+            )
         );
     }
 
@@ -617,7 +632,12 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         )
     {
         return (
-            hex"0f", EIP712_NAME, EIP712_VERSION, block.chainid, address(this), bytes32(0),
+            hex"0f",
+            EIP712_NAME,
+            EIP712_VERSION,
+            block.chainid,
+            address(this),
+            bytes32(0),
             new uint256[](0)
         );
     }
@@ -682,7 +702,9 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
 
     function _buildDomainSeparator() private view returns (bytes32) {
         return keccak256(
-            abi.encode(_DOMAIN_TYPEHASH, _HASHED_NAME, _HASHED_VERSION, block.chainid, address(this))
+            abi.encode(
+                _DOMAIN_TYPEHASH, _HASHED_NAME, _HASHED_VERSION, block.chainid, address(this)
+            )
         );
     }
 

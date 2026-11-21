@@ -408,7 +408,12 @@ contract RewardDrop is Ownable2Step, ReentrancyGuard {
         )
     {
         return (
-            hex"0f", EIP712_NAME, EIP712_VERSION, block.chainid, address(this), bytes32(0),
+            hex"0f",
+            EIP712_NAME,
+            EIP712_VERSION,
+            block.chainid,
+            address(this),
+            bytes32(0),
             new uint256[](0)
         );
     }
@@ -447,7 +452,9 @@ contract RewardDrop is Ownable2Step, ReentrancyGuard {
 
     function _buildDomainSeparator() private view returns (bytes32) {
         return keccak256(
-            abi.encode(_DOMAIN_TYPEHASH, _HASHED_NAME, _HASHED_VERSION, block.chainid, address(this))
+            abi.encode(
+                _DOMAIN_TYPEHASH, _HASHED_NAME, _HASHED_VERSION, block.chainid, address(this)
+            )
         );
     }
 
