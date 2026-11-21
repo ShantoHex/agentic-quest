@@ -9,6 +9,8 @@ import { useSession } from "../lib/session";
 import type { Tx } from "../lib/hooks";
 
 type Rules = { tokenSymbol: string; minBudget: string; maxFcfsRewardPerClaim: string; creatorNeedsAgentId: boolean; creationOpen: boolean };
+type TaskType = "follow" | "like" | "retweet" | "quote" | "post";
+type TaskDraft = { type: TaskType; target: string; requiredText: string };
 
 const SITE = typeof window !== "undefined" ? window.location.origin : "https://agentic-quest.vercel.app";
 
@@ -23,6 +25,7 @@ export function Publish() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "err" | "muted"; text: string; hash?: string } | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [tasks, setTasks] = useState<TaskDraft[]>([]);
 
   const payload = {
     wallet: session?.wallet ?? "<my Agentic Wallet address>",
@@ -51,7 +54,16 @@ export function Publish() {
         const rc = await waitForTransactionReceipt(config, { hash: h, timeout: 180_000 }).catch(() => null);
         if (rc?.status !== "success") throw new Error(`Step ${s.step} failed or was not found.`);
       }
-      setMsg({ tone: "ok", text: "Quest published. It appears on the quest list in a few seconds." });
+      if (tasks.length) {
+        const listed = await fetch(`/api/campaigns?creator=${session.wallet}`);
+        const campaigns = await listed.json();
+        const created = (campaigns.campaigns ?? []).find((campaign: { creator: string; title: string }) => campaign.creator.toLowerCase() === session.wallet.toLowerCase() && campaign.title === f.title);
+        if (!created) throw new Error("Quest was published, but its task definitions could not be attached. Open the quest and retry setup with its campaign ID.");
+        const saved = await fetch("/api/tasks/config", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ campaignId: created.id, wallet: session.wallet, tasks }) });
+        const savedResult = await saved.json();
+        if (!saved.ok) throw new Error(savedResult.error || "Quest published, but task setup could not be saved.");
+      }
+      setMsg({ tone: "ok", text: "Quest published" + (tasks.length ? " with required X tasks." : ". It appears on the quest list in a few seconds.") });
     } catch (e) { setMsg({ tone: "err", text: e instanceof Error ? e.message : "Failed." }); }
     setBusy(false);
   }
@@ -92,6 +104,17 @@ export function Publish() {
           <label className="field"><span className="field-label">Budget, USDT</span><input inputMode="decimal" value={f.budget} onChange={set("budget")} /><span className="field-hint">Min {r?.minBudget ?? "1"}, no max</span></label>
         </div>
         <label className="field"><span className="field-label">Duration (days)</span><input inputMode="numeric" value={f.durationDays} onChange={set("durationDays")} /></label>
+
+        <section className="stack" aria-labelledby="optional-tasks-heading">
+          <div className="row-wrap"><h2 id="optional-tasks-heading" className="section-label">Optional X tasks</h2><button type="button" className="btn btn-sm btn-secondary" disabled={tasks.length >= 10} onClick={() => setTasks([...tasks, { type: "follow", target: "", requiredText: "" }])}>Add task</button></div>
+          <p className="small muted">Tasks are saved after your quest is confirmed on-chain. Like, follow, and retweet tasks use an honest self-verification flow.</p>
+          {tasks.map((task, index) => <div className="task-row stack" key={index}>
+            <label className="field"><span className="field-label">Task type</span><select value={task.type} onChange={(e) => setTasks(tasks.map((item, i) => i === index ? { ...item, type: e.target.value as TaskType, target: "", requiredText: "" } : item))}><option value="follow">Follow an X account</option><option value="like">Like a post</option><option value="retweet">Retweet a post</option><option value="quote">Quote a post</option><option value="post">Post required text</option></select></label>
+            {task.type !== "post" && <label className="field"><span className="field-label">{task.type === "follow" ? "X handle" : "Target X post URL"}</span><input maxLength={300} value={task.target} onChange={(e) => setTasks(tasks.map((item, i) => i === index ? { ...item, target: e.target.value } : item))} placeholder={task.type === "follow" ? "@account" : "https://x.com/account/status/…"} /></label>}
+            {(task.type === "post" || task.type === "quote") && <label className="field"><span className="field-label">Required hashtag or text</span><input maxLength={160} value={task.requiredText} onChange={(e) => setTasks(tasks.map((item, i) => i === index ? { ...item, requiredText: e.target.value } : item))} placeholder="#AgenticQuest" /></label>}
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => setTasks(tasks.filter((_, i) => i !== index))}>Remove task</button>
+          </div>)}
+        </section>
 
         <div className="stack">
           <span className="section-label">Send this to your AI agent</span>

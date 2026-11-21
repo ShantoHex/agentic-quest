@@ -6,6 +6,7 @@ import { TestHandleMint } from "../components/AgentIdPanel";
 import { useAgentTx } from "../components/AgentTx";
 import { Bar } from "../components/ui";
 import { AgentSection } from "../components/AgentSection";
+import { QuestTasks, useQuestTaskState } from "../components/QuestTasks";
 import { explorerAddress, explorerTx, MOCK_REGISTRY, VERIFY_API } from "../config";
 import { fmtDate, short } from "../lib/format";
 import { useCampaigns, useMyAgentId, type Tx } from "../lib/hooks";
@@ -18,6 +19,7 @@ export function QuestPage() {
   const fmt = useFmt(q.data?.token);
   const c = q.data?.campaigns.find((x) => x.id === id);
   const { session, openSignIn } = useSession();
+  const taskState = useQuestTaskState(id ?? "", session);
   const me = useMyAgentId();
   const config = useConfig();
   const { request } = useAgentTx();
@@ -70,6 +72,7 @@ export function QuestPage() {
   const isCreator = !!session && session.wallet.toLowerCase() === c.creator.toLowerCase();
   const signedIn = !!session;
   const hasId = signedIn && me.ok;
+  const tasksSatisfied = !taskState.isLoading && !taskState.isError && (!taskState.data?.tasks.length || taskState.data.tasks.every((task) => taskState.data?.completed.includes(task.id)));
   return (
     <div className="page">
       <p className="crumb"><Link to="/">← All quests</Link></p>
@@ -92,6 +95,7 @@ export function QuestPage() {
       </p>
 
       <AgentSection questId={c.id} />
+      <QuestTasks campaignId={c.id} session={session} />
       <ol className="qsteps panel">
         <li className={signedIn ? "done" : ""}>
           <strong>Sign in with your agent</strong>
@@ -118,12 +122,13 @@ export function QuestPage() {
                 <span className="small muted">{you.pending.ready ? (you.pending.expired ? "Past 256 blocks: settling pays the lowest tier." : "Ready to settle.") : `Waiting ${you.pending.blocksLeft} block(s)…`}</span>
                 <button className="btn btn-primary btn-fit" disabled={!you.nextTx} onClick={() => you.nextTx && sendTx(you.nextTx)}>Settle</button>
               </>
-            ) : you?.canClaim && c.targetPostId ? (
+            ) : you?.canClaim && c.targetPostId && tasksSatisfied ? (
               <>
                 <input placeholder="Link to your quote post: https://x.com/you/status/…" value={postUrl} onChange={(e) => setPostUrl(e.target.value)} />
                 <button className="btn btn-primary btn-fit" disabled={busy || !/status\/\d+/.test(postUrl)} onClick={verifyAndClaim}>{busy ? "Verifying…" : "Verify & claim"}</button>
               </>
-            ) : <span className="small muted">Not claimable{you?.reason ? `: ${you.reason}` : ""}.</span>}
+            ) : you?.canClaim && c.targetPostId && !tasksSatisfied ? <span className="small muted">{taskState.isError ? "Could not load required tasks." : "Complete all required tasks above before claiming."}</span>
+              : <span className="small muted">Not claimable{you?.reason ? `: ${you.reason}` : ""}.</span>}
         </li>
       </ol>
       {isCreator && (
