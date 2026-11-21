@@ -136,6 +136,11 @@
       "limits": "code valid 10 minutes, single use; session only released to the holder of pollSecret"
     }
   },
+  "tasks": {
+    "storage": "Optional task definitions and per-wallet progress are stored in private Vercel Blob records.",
+    "limits": "Up to 10 tasks; X handles and HTTPS x.com/twitter.com post URLs are length-validated. Follow, like and retweet are self-verified after clicking Do it and waiting 10 seconds. Public post and quote tasks use X oEmbed and must match the linked handle.",
+    "claimGate": "The existing voucher signing route checks task completion before signing; on-chain contracts and claim parameters are unchanged."
+  },
   "endpoints": [
     {
       "name": "listCampaigns",
@@ -177,6 +182,45 @@
       },
       "auth": "optional Bearer token (must match wallet)",
       "returns": "steps[]: 1) approve(QuestRewards, budget) exact; 2) createQuest(...) — each with agenticWallet.preview; warnings[]"
+    },
+    {
+      "name": "getQuestTasks",
+      "method": "GET",
+      "url": "https://agentic-quest.vercel.app/api/tasks/config?campaignId={id}",
+      "auth": "none",
+      "returns": "optional task definitions"
+    },
+    {
+      "name": "saveQuestTasks",
+      "method": "POST",
+      "url": "https://agentic-quest.vercel.app/api/tasks/config",
+      "auth": "Bearer signed-in creator session; on-chain creator check",
+      "body": {
+        "campaignId": "3",
+        "wallet": "0x…",
+        "tasks": [
+          {
+            "type": "follow|like|retweet|quote|post",
+            "target": "@handle or https://x.com/user/status/123",
+            "requiredText": "required for quote/post"
+          }
+        ]
+      },
+      "returns": "saved task definitions; max 10"
+    },
+    {
+      "name": "taskProgress",
+      "method": "GET|POST",
+      "url": "https://agentic-quest.vercel.app/api/tasks/progress",
+      "auth": "Bearer signed-in wallet session",
+      "body": {
+        "campaignId": "3",
+        "action": "link|start|verify",
+        "handle": "@ownerhandle",
+        "taskId": "t1",
+        "postUrl": "https://x.com/ownerhandle/status/123"
+      },
+      "returns": "linked handle and task progress; follow/like/retweet are self-verified after 10 seconds; post/quote URLs are checked using public X oEmbed. Claim signing is gated on all required tasks."
     },
     {
       "name": "manageQuest",

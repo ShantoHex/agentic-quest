@@ -8,6 +8,7 @@
 //   AGENT_ID_REGISTRY, RPC_URL, CHAIN_ID  (testnet defaults below)
 //   BLOB_READ_WRITE_TOKEN  set by the linked Vercel Blob store (submission log)
 import { put } from "@vercel/blob";
+import { readProgress, readTasks } from "./_tasks.js";
 import { getAddress, isAddress, keccak256, toBytes, type Address, type Hex } from "viem";
 import { CHAIN_ID, client, DEPLOYED, encodeClaim, IS_MAINNET, qrAbi, QUEST_REWARDS, readSession, REGISTRY, REWARD_DROP, signerAccount, txFor } from "./_lib.js";
 
@@ -105,6 +106,12 @@ async function campaignVoucher(req: any, res: any, body: any) {
     ]);
     const handle = handleRaw.toLowerCase();
     if (bal === 0n || !handle) return send(res, 400, { ok: false, code: "NO_AGENT_ID", error: "This wallet has no Agent ID." });
+    const tasks = await readTasks(id.toString());
+    if (tasks.length) {
+      const progress = await readProgress(id.toString(), user);
+      const missing = tasks.filter((task) => !progress.completed.includes(task.id));
+      if (missing.length) return send(res, 403, { ok: false, code: "TASKS_INCOMPLETE", error: "Complete all required quest tasks before claiming.", remainingTasks: missing.map((task) => task.id) });
+    }
     const can = await client.readContract({ ...c, functionName: "canClaim", args: [id, user] });
     if (!can[0]) return send(res, 409, { ok: false, code: "CANNOT_CLAIM", error: `Cannot claim: ${can[1]}.` });
 
