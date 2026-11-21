@@ -6,7 +6,7 @@ import { createHmac, randomBytes, createHash, timingSafeEqual } from "node:crypt
 import { createPublicClient, encodeFunctionData, getAddress, http, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { bsc, bscTestnet } from "viem/chains";
-import { pickNetwork } from "./_networks.js";
+import { hiddenCampaignIdsFor, pickNetwork } from "./_networks.js";
 
 export const NET = pickNetwork(process.env.NETWORK);
 export const CHAIN_ID = NET.chainId;
@@ -229,8 +229,12 @@ export const erc20Abi = [
   { type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{ type: "string" }] },
 ] as const;
 
-/** Off-chain moderation: quest IDs hidden from listings (comma list in env HIDDEN_QUESTS). Claims are unaffected. */
-export const HIDDEN = new Set(String(process.env.HIDDEN_QUESTS || "").split(",").map((x) => x.trim()).filter(Boolean));
+/** Off-chain moderation: quest IDs hidden from public listings. Claims are unaffected.
+ *  Source: `_networks.ts` hiddenCampaignIds for the live QuestRewards address, plus optional env HIDDEN_QUESTS. */
+export const HIDDEN = new Set([
+  ...hiddenCampaignIdsFor(NET, qr),
+  ...String(process.env.HIDDEN_QUESTS || "").split(",").map((x) => x.trim()).filter(Boolean),
+]);
 
 export function txFor(from: Address, data: Hex, label: string, toAddr?: Address) {
   const to = toAddr ?? QUEST_REWARDS;

@@ -12,7 +12,7 @@ import { CHAIN_ID, explorerAddress, explorerTx, MOCK_REGISTRY, QUEST_REWARDS, VE
 import { fmtDate, short } from "../lib/format";
 import { useCampaigns, useMyAgentId, type Tx } from "../lib/hooks";
 import { useSession } from "../lib/session";
-import { rewardText, statusBadge, useFmt } from "./Home";
+import { isEnded, isFullyClaimed, rewardText, statusBadge, useFmt } from "./Home";
 
 /** RANDOM claims: the claimant's own secret, kept on this device until settle (its hash is committed on-chain). */
 const secretKey = (id: string, wallet: string) => `pq-rand-${CHAIN_ID}-${(QUEST_REWARDS ?? "").toLowerCase()}-${id}-${wallet.toLowerCase()}`;
@@ -44,6 +44,8 @@ export function QuestPage() {
   if (q.isLoading) return <div className="page narrow"><p className="muted">Loading…</p></div>;
   if (!c) return <div className="page narrow"><p>Quest not found. <Link to="/">All quests</Link></p></div>;
   const you = c.you;
+  const fullyClaimed = isFullyClaimed(c);
+  const ended = isEnded(c);
 
   async function sendTx(tx: Tx) {
     const h = await request({ label: tx.label, from: tx.from, to: tx.to, data: tx.data, value: BigInt(tx.value || "0") });
@@ -155,6 +157,16 @@ export function QuestPage() {
               <>
                 <span className="small muted">{you.pending.ready ? (you.pending.expired ? "Reveal window passed: settling pays the lowest tier." : "Ready to settle.") : `Waiting ${you.pending.blocksLeft} block(s)…`}</span>
                 <button className="btn btn-primary btn-fit" disabled={busy || !you.pending.ready} onClick={settle}>{busy ? "Preparing…" : "Settle"}</button>
+              </>
+            ) : fullyClaimed ? (
+              <>
+                <span className="small muted">Every slot has been claimed, or the budget can't pay another reward.</span>
+                <button className="btn btn-primary btn-fit" disabled>Fully claimed</button>
+              </>
+            ) : ended ? (
+              <>
+                <span className="small muted">This quest has ended.</span>
+                <button className="btn btn-primary btn-fit" disabled>Ended</button>
               </>
             ) : you?.canClaim && c.targetPostId && tasksSatisfied ? (
               <>

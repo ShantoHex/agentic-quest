@@ -2,13 +2,16 @@
 # Agentic Quest — mainnet launch helper (BNB Smart Chain, chainId 56).
 # NOTHING runs without CONFIRM=yes: every step sends real mainnet transactions from the deployer (owner) wallet.
 #
+# Required flow: deploy, then golive. No pre-made quest is created; publish from the site after go-live.
 #   CONFIRM=yes scripts/launch-mainnet.sh deploy                       # deploy QuestRewards v5 + Sourcify verify + setSigner(mainnet signer)
+#   CONFIRM=yes scripts/launch-mainnet.sh golive                       # NETWORK=mainnet on Vercel + redeploy via git push (never `vercel deploy` from web/)
+#
+# Optional — only if you want to create/fund a quest from this script instead of the Publish page:
 #   CONFIRM=yes scripts/launch-mainnet.sh campaign fcfs 0.10 50 <xPostId|-> "<title>" <budgetUSDT> [endUnix]
 #   CONFIRM=yes scripts/launch-mainnet.sh campaign random "0.05:30,0.10:50,0.20:20" 100 <xPostId|-> "<title>" <budgetUSDT> [endUnix]
 #        (exact approve of <budget> + createQuest: creates AND funds. Rewards >= 0.05 each, no max; RANDOM = 1-5 "amount:chance%" tiers summing
 #         to 100; budget >= 0.1 and >= one claim (largest tier); "-" = set the X post later with setTargetPost. MAX_TRANCHE caps this script only)
 #   CONFIRM=yes scripts/launch-mainnet.sh fund <campaignId> <usdt>     # one small tranche (<= MAX_TRANCHE, default 25)
-#   CONFIRM=yes scripts/launch-mainnet.sh golive                       # NETWORK=mainnet on Vercel + redeploy via git push (never `vercel deploy` from web/)
 #
 # Keys: the deployer/owner key is loaded from secrets/deployer.json into an env var only (never printed).
 # The voucher signer is a SEPARATE key that exists only in Vercel (SIGNER_PRIVATE_KEY_MAINNET); only its
@@ -23,7 +26,7 @@ USDT=0x55d398326f99059fF775485246999027B3197955
 OUT=deployments/mainnet.json
 GAS=(--gas-price "${GAS_PRICE:-0.1gwei}")
 
-if [ "${CONFIRM:-}" != "yes" ]; then sed -n 2,14p "$0"; echo "Refusing: set CONFIRM=yes (real mainnet transactions)."; exit 1; fi
+if [ "${CONFIRM:-}" != "yes" ]; then sed -n 2,18p "$0"; echo "Refusing: set CONFIRM=yes (real mainnet transactions)."; exit 1; fi
 [ "$(cast chain-id --rpc-url "$RPC")" = "56" ] || { echo "RPC is not chain 56"; exit 1; }
 PK=$(python3 -c "import json;print(json.load(open('${DEPLOYER_JSON:-/workspace/secrets/deployer.json}'))['data'][0]['private_key'])")
 export PK
@@ -53,7 +56,7 @@ deploy)
   printf '{"chainId":56,"QuestRewards":"%s","version":"v5-tiers","eip712Version":"2","owner":"%s","signer":"%s","agentIdRegistry":"%s","usdt":"%s"}\n' \
     "$ADDR" "$OWNER" "$SIGNER" "$REGISTRY" "$USDT" > "$OUT"
   sed -i "/key: \"mainnet\"/,/mockRegistry/ s#questRewards: \"[^\"]*\"#questRewards: \"$ADDR\"#" web/api/_networks.ts
-  echo "Wrote $OUT and web/api/_networks.ts. Next: campaign, fund, golive." ;;
+  echo "Wrote $OUT and web/api/_networks.ts. Next: golive (campaign/fund are optional; publish from the site if you prefer)." ;;
 campaign)
   MODE=${2:?fcfs|random}; REWARD=${3:?amount (fcfs) or tiers "a:c,a:c" (random)}; SLOTS=${4:?slots}; POST=${5:?xPostId or -}; TITLE=${6:?title}; BUDGET=${7:?budgetUSDT}; END=${8:-0}
   [ "$POST" = "-" ] && POST=""
@@ -101,5 +104,5 @@ golive)
   # Vercel builds production from git (Root Directory = web); redeploy by pushing, never `vercel deploy` from web/.
   git add web/api/_networks.ts deployments/mainnet.json && git commit -m "Go live: QuestRewards on BSC mainnet" && git push origin main
   echo "Pushed. When the Vercel production build is Ready:"; echo "  curl -s https://agentic-quest.vercel.app/api/campaigns | head -c 300" ;;
-*) sed -n 2,14p "$0"; exit 1 ;;
+*) sed -n 2,18p "$0"; exit 1 ;;
 esac

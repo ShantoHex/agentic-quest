@@ -18,12 +18,20 @@ export function rewardText(c: Camp, fmt: (v?: string) => string) {
   return lo === hi ? fmt(lo.toString()) : `${fmt(lo.toString()).split(" ")[0]}–${fmt(hi.toString())}`;
 }
 
+export function isEnded(c: Camp) {
+  return !!c.endTime && c.endTime * 1000 < Date.now();
+}
+
+/** remainingSlots already mins free slots and what the unreserved budget can still pay. */
+export function isFullyClaimed(c: Camp) {
+  return Number(c.remainingSlots) === 0;
+}
+
 export function statusBadge(c: Camp) {
-  const ended = !!c.endTime && c.endTime * 1000 < Date.now();
   if (c.blocked) return <Badge tone="warn">Blocked</Badge>;
   if (c.paused) return <Badge tone="warn">Paused</Badge>;
-  if (ended) return <Badge tone="muted">Ended</Badge>;
-  if (Number(c.remainingSlots) === 0) return <Badge tone="muted">Full</Badge>;
+  if (isFullyClaimed(c)) return <Badge tone="claimed">Fully claimed</Badge>;
+  if (isEnded(c)) return <Badge tone="muted">Ended</Badge>;
   return <Badge tone="ok">Live</Badge>;
 }
 
@@ -31,7 +39,7 @@ export function Home() {
   const q = useCampaigns();
   const fmt = useFmt(q.data?.token);
   const list = q.data?.campaigns ?? [];
-  const live = list.filter((c) => !c.blocked && !c.paused && Number(c.remainingSlots) > 0 && !(c.endTime && c.endTime * 1000 < Date.now()));
+  const live = list.filter((c) => !c.blocked && !c.paused && !isFullyClaimed(c) && !isEnded(c));
   const open = list.reduce((n, c) => n + Number(c.remainingSlots), 0);
   return (
     <div className="page">
@@ -55,7 +63,12 @@ export function Home() {
         {q.isLoading ? <p className="empty">Loading quests…</p>
           : !q.data?.ok ? <p className="callout">Could not load quests. Try again.</p>
           : q.data.deployed === false ? <p className="empty">Quests are not live on {NET.name} yet.</p>
-          : list.length === 0 ? <p className="empty">No quests yet. <Link to="/publish">Publish the first one</Link>.</p>
+          : list.length === 0 ? (
+            <div className="empty empty-quests">
+              <p>No quests yet</p>
+              <Link className="btn btn-primary" to="/publish">Publish a quest</Link>
+            </div>
+          )
           : list.map((c, i) => (
             <Link key={c.id} to={`/q/${c.id}`} className={`quest quest-${c.mode === "FCFS" ? "fcfs" : "random"} tone-${i % 3}`}>
               <div className="q-top"><span className="q-id">#{c.id}</span><span className="q-mode">{c.mode === "FCFS" ? "First come" : "Random"}</span>{statusBadge(c)}</div>

@@ -270,7 +270,7 @@ credited to any quest), two-step ownership transfer / renounce. **The owner cann
 quest's rewards, slots or budget, or reverse claims. The owner may create quests without an Agent ID (to seed demo quests). No proxy,
 no mint, no fee. Anyone may top up with `fundCampaign`.
 
-Off-chain moderation: quest IDs listed in the Vercel env `HIDDEN_QUESTS` (comma-separated) are hidden from the site listing only.
+Off-chain moderation: quest IDs in `web/api/_networks.ts` (`hiddenCampaignIds`, scoped to that network's QuestRewards address) and any extra IDs in the Vercel env `HIDDEN_QUESTS` (comma-separated) are hidden from the site listing only. Claims are unaffected.
 
 ## Login: agent-driven, via the owner's Agentic Wallet
 
@@ -299,11 +299,14 @@ still works). On purpose, the on-chain names are unchanged so deployed contracts
 The site picks its network from one Vercel env var: `NETWORK=mainnet` (unset = testnet). Network table: `web/api/_networks.ts`.
 Agent docs (`/llms.txt`, `/agent.json`) are regenerated for the chosen network at build time (`web/scripts/net-docs.mjs`).
 
-1. Send ~0.003–0.005 BNB (gas) and the quest budget in USDT to the owner/deployer wallet.
+1. Send ~0.003–0.005 BNB (gas) to the owner/deployer wallet. USDT budget is only needed when you publish a quest.
 2. `CONFIRM=yes scripts/launch-mainnet.sh deploy`: deploys QuestRewards (official Agent ID registry + BSC-USD), verifies on Sourcify, sets the voucher signer.
-3. `CONFIRM=yes scripts/launch-mainnet.sh campaign fcfs 0.10 50 "<xPostId or ->" "<title>" <budget>` or `... campaign random "0.05:30,0.10:50,0.20:20" 100 ...`: exact approve + createQuest (creates and funds; budget ≥ 0.1 and ≥ one claim; rewards ≥ 0.05, no max; `-` = set the X post later; the script itself caps each owner tranche at MAX_TRANCHE, default 25, as a launch safety habit; public publishing has no max).
-4. `CONFIRM=yes scripts/launch-mainnet.sh fund <id> <usdt>`: one small tranche at a time (max 25 USDT per call by default). Top up as slots are used.
-5. `CONFIRM=yes scripts/launch-mainnet.sh golive`: sets `NETWORK=mainnet` on Vercel and redeploys.
+3. `CONFIRM=yes scripts/launch-mainnet.sh golive`: sets `NETWORK=mainnet` on Vercel and redeploys. The site goes live with no pre-made quest; publish from the site.
+
+Optional, if you want to create a first quest from this script instead of the Publish page:
+
+4. `CONFIRM=yes scripts/launch-mainnet.sh campaign fcfs 0.10 50 "<xPostId or ->" "<title>" <budget>` or `... campaign random "0.05:30,0.10:50,0.20:20" 100 ...`: exact approve + createQuest (creates and funds; budget ≥ 0.1 and ≥ one claim; rewards ≥ 0.05, no max; `-` = set the X post later; the script itself caps each owner tranche at MAX_TRANCHE, default 25, as a launch safety habit; public publishing has no max).
+5. `CONFIRM=yes scripts/launch-mainnet.sh fund <id> <usdt>`: one small tranche at a time (max 25 USDT per call by default). Top up as slots are used.
 
 ## Security summary
 

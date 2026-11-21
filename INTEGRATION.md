@@ -312,5 +312,5 @@ Developer Mode must be enabled in the Agentic Wallet (Binance App) for both comm
 
 Server env: `SIGNER_PRIVATE_KEY` (voucher signer, already set), optional `AUTH_SECRET` (≥32 chars, HMAC for login/session;
 falls back to a hash derived from the signer key), optional `RANDOM_SECRET` (≥32 chars, key for the RANDOM server secrets; falls back to a hash derived
-from the signer key; rotate only when no RANDOM claim is pending), `QUEST_REWARDS_ADDRESS` (default from `web/api/_networks.ts`), `HIDDEN_QUESTS` (comma-separated quest IDs hidden from listings).
+from the signer key; rotate only when no RANDOM claim is pending), `QUEST_REWARDS_ADDRESS` (default from `web/api/_networks.ts`), `HIDDEN_QUESTS` (optional extra comma-separated quest IDs hidden from listings, in addition to `hiddenCampaignIds` in `web/api/_networks.ts`).
 The campaign's X post to quote is read on-chain (`targetPostId`), so `TARGET_POST_ID` is only used by the legacy v2 path.

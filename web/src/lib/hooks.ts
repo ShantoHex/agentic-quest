@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useReadContracts } from "wagmi";
 import type { Address, Hex } from "viem";
 import { agentIdAbi, erc20Abi } from "./abis";
-import { AGENT_ID_REGISTRY } from "../config";
+import { hiddenCampaignIdsFor } from "../../api/_networks";
+import { AGENT_ID_REGISTRY, NET, QUEST_REWARDS } from "../config";
 import { useAccount, useSession } from "./session";
 
 export function useMyAgentId() {
@@ -47,7 +48,12 @@ export function useCampaigns() {
   const { session } = useSession();
   return useQuery({
     queryKey: ["campaigns", session?.wallet ?? ""],
-    queryFn: async (): Promise<CampResp> => (await fetch(`/api/campaigns${session ? `?wallet=${session.wallet}` : ""}`)).json(),
+    queryFn: async (): Promise<CampResp> => {
+      const data: CampResp = await (await fetch(`/api/campaigns${session ? `?wallet=${session.wallet}` : ""}`)).json();
+      const hidden = new Set(hiddenCampaignIdsFor(NET, QUEST_REWARDS ?? ""));
+      if (data?.campaigns?.length && hidden.size) data.campaigns = data.campaigns.filter((c) => !hidden.has(c.id));
+      return data;
+    },
     refetchInterval: 6000,
   });
 }

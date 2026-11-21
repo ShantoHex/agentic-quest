@@ -80,7 +80,7 @@ export function Bar({ left, total }: { left: number; total: number }) {
   return <div className="q-bar" role="img" aria-label={`${left} of ${total} slots left`}><i style={{ width: `${pct}%` }} /></div>;
 }
 
-export type BadgeTone = "ok" | "warn" | "muted" | "accent" | "err";
+export type BadgeTone = "ok" | "warn" | "muted" | "accent" | "err" | "claimed";
 export function Badge({ tone, children }: { tone: BadgeTone; children: ReactNode }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
