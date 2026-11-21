@@ -1,0 +1,277 @@
+{
+  "network": "bsc-testnet",
+  "chainId": 97,
+  "rpc": "https://bsc-testnet-dataseed.bnbchain.org",
+  "explorer": "https://testnet.bscscan.com",
+  "deployer": "0x50EF873dBfAB2A5716FbaDAAA03712fFC7d0797e",
+  "contracts": {
+    "ProofQuest": {
+      "address": "0xCE3277D3Cbf7e0785627A63dA7Bb595669322d19",
+      "deployTx": "0x6cfcc233e5c6c673c456d029d6a1e7d9cdb80d614e615913211ea99ec4238e9b",
+      "sourcify": "https://repo.sourcify.dev/97/0xCE3277D3Cbf7e0785627A63dA7Bb595669322d19",
+      "sourcifyLookup": "https://sourcify.dev/#/lookup/0xCE3277D3Cbf7e0785627A63dA7Bb595669322d19",
+      "verification": "match"
+    },
+    "MockAgentID": {
+      "address": "0xD126FBafc7e7a609056e421187A0286FFC27e5c5",
+      "deployTx": "0xefec477ab1ac7c5d1af0368d2c61833819459f46fa2a76b1d38585428e04f475",
+      "sourcify": "https://repo.sourcify.dev/97/0xD126FBafc7e7a609056e421187A0286FFC27e5c5",
+      "sourcifyLookup": "https://sourcify.dev/#/lookup/0xD126FBafc7e7a609056e421187A0286FFC27e5c5",
+      "verification": "match"
+    },
+    "MockERC20": {
+      "address": "0x6898e0e131FDB06b9Ae8d4C3f4475438F04c3398",
+      "name": "Test USDT",
+      "symbol": "USDT",
+      "decimals": 18,
+      "deployTx": "0x720267d7c45a507d41f8bee3d0057059b68c40c7307908a16db372712979e9c8",
+      "sourcify": "https://repo.sourcify.dev/97/0x6898e0e131FDB06b9Ae8d4C3f4475438F04c3398",
+      "sourcifyLookup": "https://sourcify.dev/#/lookup/0x6898e0e131FDB06b9Ae8d4C3f4475438F04c3398",
+      "verification": "match"
+    },
+    "RewardDrop_v1_deprecated": {
+      "address": "0xC7f04e754c0667C2255489F809D890293BCB9E18",
+      "deployTx": "0xbebf64565f72b14ee477e8fd0454f23b8da3b6bc26ea26fb55788a3a63cc5491",
+      "constructor": {
+        "agentId": "0xD126FBafc7e7a609056e421187A0286FFC27e5c5",
+        "token": "0x6898e0e131FDB06b9Ae8d4C3f4475438F04c3398",
+        "owner": "0x50EF873dBfAB2A5716FbaDAAA03712fFC7d0797e"
+      },
+      "abi": "(pre-voucher ABI, not kept)",
+      "sourcify": "https://repo.sourcify.dev/97/0xC7f04e754c0667C2255489F809D890293BCB9E18",
+      "sourcifyLookup": "https://sourcify.dev/#/lookup/0xC7f04e754c0667C2255489F809D890293BCB9E18",
+      "verification": "match",
+      "deprecated": true,
+      "deprecatedReason": "replaced by voucher-gated version",
+      "pausedTx": "0x301bf8c697110d27bc999bb4642c85d2b1fa40e83a1a592d2271efd09fd0ca14",
+      "withdrawLeftoverTx": "0xce9c56584e6e66e1afab000d3cc152751ad3a53aac39475b146f9e8b8271ca5c",
+      "withdrawn": "99950000000000000000"
+    },
+    "RewardDrop": {
+      "address": "0xeF23c96f73d87c62d16e6672F20B275A30058E2F",
+      "version": "v2-voucher",
+      "deployTx": "0x351602372ddcde72159bcef6adcfb22bbc6c81452ca6734f103ca92775aedd58",
+      "constructor": {
+        "agentId": "0xD126FBafc7e7a609056e421187A0286FFC27e5c5",
+        "token": "0x6898e0e131FDB06b9Ae8d4C3f4475438F04c3398",
+        "owner": "0x50EF873dBfAB2A5716FbaDAAA03712fFC7d0797e"
+      },
+      "signer": "0x50EF873dBfAB2A5716FbaDAAA03712fFC7d0797e",
+      "signerNote": "placeholder (owner) until the frontend's server signer address is provided",
+      "setSignerTx": "0xb14a645712475e4aac5d398395e26199ed16fc6cbf083666e3f8b8d301afc37c",
+      "eip712": {
+        "name": "ProofQuest RewardDrop",
+        "version": "1",
+        "chainId": 97,
+        "verifyingContract": "0xeF23c96f73d87c62d16e6672F20B275A30058E2F",
+        "voucherType": "Voucher(bytes32 handleHash,address user,bytes32 xPostIdHash,bytes32 xAccountIdHash,uint256 deadline)"
+      },
+      "abi": "abi/RewardDrop.json",
+      "sourcify": "https://repo.sourcify.dev/97/0xeF23c96f73d87c62d16e6672F20B275A30058E2F",
+      "sourcifyLookup": "https://sourcify.dev/#/lookup/0xeF23c96f73d87c62d16e6672F20B275A30058E2F",
+      "verification": "match",
+      "note": "v2 single-drop; superseded by QuestRewards for new campaigns (still live, funded, signer 0x3d6a\u2026)"
+    },
+    "QuestRewards_v3_superseded": {
+      "address": "0x387c5D015CA00DeD9e6a99E0e01b645e84a0D3E4",
+      "version": "v3-campaigns (RANDOM + FCFS)",
+      "deployTx": "0xe2d6b1ef3cbb8b4e4b55f38ff1c629220c88336639094b10d4337054b38ea71a",
+      "constructor": {
+        "agentId": "0xD126FBafc7e7a609056e421187A0286FFC27e5c5",
+        "token": "0x6898e0e131FDB06b9Ae8d4C3f4475438F04c3398",
+        "owner": "0x50EF873dBfAB2A5716FbaDAAA03712fFC7d0797e"
+      },
+      "signer": "0x3d6a6B965c815447F2763D50477400dc01DE2098",
+      "setSignerTx": "0x1e6d3fcaa0eef8039ccb23126573cd5aa9f1648925d7953af1f35f8332966a7b",
+      "eip712": {
+        "name": "ProofQuest QuestRewards",
+        "version": "1",
+        "chainId": 97,
+        "verifyingContract": "0x387c5D015CA00DeD9e6a99E0e01b645e84a0D3E4",
+        "voucherType": "Voucher(uint256 campaignId,bytes32 handleHash,address user,bytes32 xPostIdHash,bytes32 xAccountIdHash,uint256 deadline)"
+      },
+      "campaigns": [
+        {
+          "id": 1,
+          "mode": "RANDOM",
+          "maxClaims": 250,
+          "endTime": 1796803200,
+          "targetPostId": "",
+          "title": "Quote & roll: random USDT reward (0.05-0.20)",
+          "createTx": "0x798937a36f40df1878dfc0cb54ede1fe8d391a815904a492bbcd035e11926715",
+          "funded": "20 test USDT",
+          "fundTx": "0x03e7827d80c5fb8db078bb2963402cf7459addfbed1ca20a79c1e616a223274d"
+        },
+        {
+          "id": 2,
+          "mode": "FCFS",
+          "fcfsAmount": "100000000000000000",
+          "maxClaims": 50,
+          "endTime": 1796803200,
+          "targetPostId": "",
+          "title": "First 50 claimers: 0.10 USDT each",
+          "createTx": "0xc0f1dc72370bc3166ffc0cc0cdea3c423b03a4c96acaafc0c84e6942fceb1eec",
+          "funded": "5 test USDT",
+          "fundTx": "0xdcc36ca4e61f228a707840d66f38dfed910a9cdfcfdea87215637046d1452540"
+        }
+      ],
+      "approveTx": "0x4f4b045e631d1fe99b29f6f3fafb3955a68bcdc35e5ec3ed4703e244033f5387",
+      "abi": "abi/QuestRewards.json",
+      "sourcify": "https://repo.sourcify.dev/97/0x387c5D015CA00DeD9e6a99E0e01b645e84a0D3E4",
+      "sourcifyLookup": "https://sourcify.dev/#/lookup/0x387c5D015CA00DeD9e6a99E0e01b645e84a0D3E4",
+      "verification": "match (creation + runtime)",
+      "superseded": true,
+      "supersededBy": "0x0c14AA36e477A885881c2084769CaF6E1AB40E9a",
+      "note": "v3 owner-only campaigns; replaced by permissionless v4. Still holds its 25 test USDT."
+    },
+    "QuestRewards": {
+      "address": "0x0c14AA36e477A885881c2084769CaF6E1AB40E9a",
+      "version": "v4-permissionless (createQuest by Agent ID holders; creator-owned funds)",
+      "deployTx": "0xeee326b992a6121dcc9ffc09cce5f62aecf02cfd701bbd14a20830ae5b8dde0d",
+      "constructor": {
+        "agentId": "0xD126FBafc7e7a609056e421187A0286FFC27e5c5",
+        "token": "0x6898e0e131FDB06b9Ae8d4C3f4475438F04c3398",
+        "owner": "0x50EF873dBfAB2A5716FbaDAAA03712fFC7d0797e"
+      },
+      "signer": "0x3d6a6B965c815447F2763D50477400dc01DE2098",
+      "setSignerTx": "0xe668eeadf79d9c477751f075a354f645fc51dd1207d1b73959d5045f581eb71a",
+      "creationConfig": {
+        "creationOpen": true,
+        "creatorNeedsAgentId": true,
+        "minBudget": "1 USDT (constructor default was 5; set via setCreationConfig tx 0x931591bbddf51f7f9129684813ecda78f72a79a6b24441f5ca11e605c63ee37c on 2026-11-20)",
+        "maxFcfsAmount": "10 USDT",
+        "fee": "0"
+      },
+      "eip712": {
+        "name": "ProofQuest QuestRewards",
+        "version": "1",
+        "chainId": 97,
+        "verifyingContract": "0x0c14AA36e477A885881c2084769CaF6E1AB40E9a",
+        "voucherType": "Voucher(uint256 campaignId,bytes32 handleHash,address user,bytes32 xPostIdHash,bytes32 xAccountIdHash,uint256 deadline)"
+      },
+      "ownerApproveTx": "0xe4036aff4173edbe21cf1de5e1689f7ffa24420bbb042d1ec44c281ff9729452",
+      "campaigns": [
+        {
+          "id": 1,
+          "creator": "owner",
+          "mode": "RANDOM",
+          "maxClaims": 250,
+          "endTime": 1796803200,
+          "targetPostId": "",
+          "title": "Quote & roll: random USDT reward (0.05-0.20)",
+          "budget": "20 test USDT",
+          "createAndFundTx": "0xac56e0caae31cf542ee3785e7ab22094613cb3286a19726e6beb77bc50dd5fcb"
+        },
+        {
+          "id": 2,
+          "creator": "owner",
+          "mode": "FCFS",
+          "fcfsAmount": "100000000000000000",
+          "maxClaims": 50,
+          "endTime": 1796803200,
+          "targetPostId": "",
+          "title": "First 50 claimers: 0.10 USDT each",
+          "budget": "5 test USDT",
+          "createAndFundTx": "0x8e3e0f0ea00af8accb291bf15ccd7db588c193fc402954121c6805996807bc46"
+        },
+        {
+          "id": 3,
+          "creator": "0xC188AB81B00cfc0D3c6483159C9a439c5B0516f0 (throwaway e2e creator, mock handle questmaker1)",
+          "mode": "FCFS",
+          "fcfsAmount": "100000000000000000",
+          "maxClaims": 20,
+          "durationDays": 7,
+          "targetPostId": "2122973166758945045",
+          "title": "E2E community quest: quote the Agent ID post",
+          "budget": "5 test USDT",
+          "createAndFundTx": "0x2dbe51e54a7ebc84957ec1bd25e4d1113e5b0a9c1ab82235f320743fce815f88",
+          "publishedVia": "POST /api/publish (exact approve + createQuest)"
+        }
+      ],
+      "e2e": {
+        "creator": "0xC188AB81B00cfc0D3c6483159C9a439c5B0516f0",
+        "creatorKeyFile": "/workspace/secrets/e2e-creator.json (600, throwaway)",
+        "claimer": "0x1Bb8a99d9D6c8cD005da5855Cb5372Fa0b70E2d6 (mock handle rewarde2e1)",
+        "xFixture": "target = public @BNBCHAIN post 2122973166758945045; proof = public @BNBCHAIN quote 2123020505083199585 (testnet fixture only; real verification via X embed data)",
+        "results": [
+          "creator self-claim rejected: true CANNOT_CLAIM Cannot claim: creator cannot claim own quest.",
+          "voucher ok for @BNBCHAIN, mode FCFS, tx to 0x0c14AA36e477A885881c2084769CaF6E1AB40E9a",
+          "claimer received: 0.1",
+          "second claim rejected: true CANNOT_CLAIM",
+          "withdraw while live rejected: true STILL_ACTIVE",
+          "non-creator manage rejected: true NOT_CREATOR",
+          "final balance 3.9, paid 0.1, paused false, slots left 19"
+        ],
+        "txs": {
+          "claim": "0xa4cca8329c082e6e9745f66b8a31a87182050c6162b245ae34f4be72ec38384c",
+          "pause": "0xac7d00527201e24530ed90c3751826a5193177786946513142dae1661758e15a",
+          "withdraw": "0x34488c56e74ce4b90f2866ac4e5eb2827367b97ab4addad6b2a15df8d2340e6d",
+          "resume": "0x7f111c2986c76ad98e0816600fd7baa8725b25ef13ca9c2fa40f2a39c855063c"
+        }
+      },
+      "abi": "abi/QuestRewards.json",
+      "sourcify": "https://repo.sourcify.dev/97/0x0c14AA36e477A885881c2084769CaF6E1AB40E9a",
+      "verification": "match (creation + runtime)"
+    }
+  },
+  "actions": {
+    "mintHandle": {
+      "handle": "proofquestdemo",
+      "to": "0x50EF873dBfAB2A5716FbaDAAA03712fFC7d0797e",
+      "tx": "0xa75b8fa0462eaf69247621e9eb5f6684900e218ce4d0e5920e5efd5dc102c59e"
+    },
+    "mintMockUSDT": {
+      "to": "0x50EF873dBfAB2A5716FbaDAAA03712fFC7d0797e",
+      "amount": "1000000000000000000000000",
+      "tx": "0xf83f87f7f9fe35e902287dda85a8756928d49fa412a991a1ad7862a209c0d08a"
+    },
+    "addPrizeToken": {
+      "token": "0x6898e0e131FDB06b9Ae8d4C3f4475438F04c3398",
+      "tx": "0x1c8fa29029cf1aac0700e30c152204398fcbd6675117b50b8b6a4e6313f9760c"
+    },
+    "rewardDropApprove": {
+      "amount": "100000000000000000000",
+      "tx": "0xd09673d5fce0e818328f0f31a8d242428698911167241a3d241475147d2debe6"
+    },
+    "rewardDropFund": {
+      "amount": "100000000000000000000",
+      "tx": "0x9098b7bd399202f8ac59845182c19e071be5058544ecd8ef5aefdcdeba633805"
+    },
+    "rewardDropE2E": {
+      "user": "0x50EF873dBfAB2A5716FbaDAAA03712fFC7d0797e",
+      "handle": "proofquestdemo",
+      "commitTx": "0x67bed97a49b317f034ad29e597d3259096cf28e3859f0e70826c3eba509ff573",
+      "commitBlock": 143596232,
+      "targetBlock": 143596234,
+      "settleTx": "0x9861072fddc98d3b2fe41ded1234e8a51258b66f2162b404569de2ca4e90414b",
+      "settleBlock": 143596256,
+      "paid": "50000000000000000",
+      "paidHuman": "0.05 USDT (test)"
+    },
+    "rewardDropV2Approve": {
+      "amount": "50000000000000000000",
+      "tx": "0x3ffb72064094ba7ca5e056980f0670269bf49d96d36898af87cef449a632332d"
+    },
+    "rewardDropV2Fund": {
+      "amount": "50000000000000000000",
+      "tx": "0x2e7d2af6e751402fc85db384eddefac0e46a3d6414bb399fefffcd7d22c2c2e4"
+    },
+    "rewardDropV2E2E": {
+      "claimer": "0x1Bb8a99d9D6c8cD005da5855Cb5372Fa0b70E2d6",
+      "claimerKeyFile": "throwaway testnet key file (not in this repo)",
+      "fundClaimerTx": "0x5a6ec2b25b01da3edee0c37330a08eaf8d7a455bfec6960722f8e57bb3f062c4",
+      "fundClaimerAmount": "0.01 tBNB",
+      "mintHandleTx": "0x758eef366a68a86ff5b82b4217aa460c6345ca933768fa4aa26e8cde4ff9ee52",
+      "handle": "rewarde2e1",
+      "testPostId": "1990000000000000001",
+      "testXUserId": "1234567890",
+      "commitTx": "0x713d6f30f820673f751cd50bef54acd175e7dc1821de4103cf2788d51497be80",
+      "commitBlock": 143597766,
+      "targetBlock": 143597768,
+      "settleTx": "0x2ab90000b1c9fb2e5d42947fc7f3c619b3ee9762c45fea01fbecd87056490ce8",
+      "settleBlock": 143597787,
+      "paid": "50000000000000000",
+      "paidHuman": "0.05 USDT (test)"
+    }
+  }
+}

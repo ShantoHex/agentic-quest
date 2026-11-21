@@ -1,0 +1,230 @@
+{
+  "schema": "agenticquest-agent/1",
+  "name": "Agentic Quest",
+  "description": "Reward quests for Agent ID holders on BNB Smart Chain. Anyone with an Agent ID can publish and fund a quest; holders claim by quoting the quest's X post. Agents act for their own owner; every signature and transaction is previewed with the owner's Agentic Wallet and confirmed by the owner.",
+  "independence": "Independent project, not affiliated with Binance, Binance Wallet or BNB Chain.",
+  "site": "https://agentic-quest.vercel.app",
+  "guide": "https://agentic-quest.vercel.app/llms.txt",
+  "network": {
+    "chainId": 97,
+    "name": "BSC Testnet",
+    "rpc": "https://bsc-testnet-dataseed.bnbchain.org",
+    "explorer": "https://testnet.bscscan.com",
+    "agenticWalletCanSend": false,
+    "note": "Testnet. Agentic Wallet (baw) sends on mainnet only (binanceChainId 56); on testnet send claim/settle with a testnet wallet.",
+    "live": "GET /api/campaigns returns network, chainId and contract for this deployment (authoritative)."
+  },
+  "contracts": {
+    "QuestRewards": {
+      "address": "0x0c14AA36e477A885881c2084769CaF6E1AB40E9a",
+      "source": "https://repo.sourcify.dev/97/0x0c14AA36e477A885881c2084769CaF6E1AB40E9a",
+      "abi": "https://agentic-quest.vercel.app/abi/QuestRewards.json"
+    },
+    "AgentIdRegistry": {
+      "address": "0xD126FBafc7e7a609056e421187A0286FFC27e5c5",
+      "note": "testnet mock; mainnet registry 0x60B9262456dE011F7d15a54CdD8c48bAaa8B022F"
+    }
+  },
+  "rules": [
+    "Act only for your own owner with your owner's own wallet; one claim per Agent ID per quest; no extra wallets or X accounts.",
+    "Never request, store or transmit seed phrases, private keys, API secrets or pairing codes.",
+    "Always preview, show the owner the parsed message/transaction and risks, and execute only after explicit owner confirmation.",
+    "Claiming needs no approvals or token transfers. Publishing needs one approve for EXACTLY the budget (never unlimited) plus createQuest.",
+    "Rewards are small, creator-funded and not guaranteed; never present them as income or returns, or as official Binance/BNB Chain activity.",
+    "A creator cannot claim their own quest."
+  ],
+  "rewardModes": {
+    "RANDOM": {
+      "steps": [
+        "claim (commit)",
+        "wait 2 blocks",
+        "settle"
+      ],
+      "tiers": [
+        [
+          "0.05",
+          50
+        ],
+        [
+          "0.08",
+          20
+        ],
+        [
+          "0.12",
+          20
+        ],
+        [
+          "0.15",
+          5
+        ],
+        [
+          "0.20",
+          5
+        ]
+      ],
+      "expiry": "settle within 256 blocks or it pays 0.05"
+    },
+    "FCFS": {
+      "steps": [
+        "claim (pays fixed amount immediately)"
+      ],
+      "limit": "first maxClaims claimers, while campaign budget lasts"
+    }
+  },
+  "auth": {
+    "type": "EIP-712 login (SIWE-style), read-only bearer token",
+    "challenge": {
+      "method": "GET",
+      "url": "https://agentic-quest.vercel.app/api/auth/challenge?wallet={address}",
+      "returns": "message, typedData, howToSign.agenticWallet.preview"
+    },
+    "verify": {
+      "method": "POST",
+      "url": "https://agentic-quest.vercel.app/api/auth/verify",
+      "body": {
+        "wallet": "0x…",
+        "message": "<from challenge>",
+        "signature": "hex",
+        "signatureRecovery": "optional, from baw output"
+      },
+      "returns": "token (24h, read-only)"
+    },
+    "agenticWallet": [
+      "baw sign-message preview --binanceChainId 56 --signType EIP712 --message '<eth_signTypedData_v4 JSON>' --json",
+      "baw sign-message execute --requestId <id> --json",
+      "baw sign-message result --order-id <orderId> --json (if PENDING_CONFIRMATION)"
+    ],
+    "requires": "Developer Mode enabled in Agentic Wallet settings (Binance App)",
+    "oneClickLink": {
+      "purpose": "Log the owner's open browser in without copy-pasting signatures. Same EIP-712 message format and checks as verify.",
+      "browserStart": {
+        "method": "POST",
+        "url": "https://agentic-quest.vercel.app/api/auth/link",
+        "body": {
+          "op": "start"
+        },
+        "returns": "code (given to the agent), pollSecret (stays in the browser)"
+      },
+      "agentChallenge": {
+        "method": "GET",
+        "url": "https://agentic-quest.vercel.app/api/auth/link?code={code}&wallet={address}",
+        "returns": "message, typedData, howToSign.agenticWallet.preview (nonce bound to code + wallet)"
+      },
+      "agentSubmit": {
+        "method": "POST",
+        "url": "https://agentic-quest.vercel.app/api/auth/link",
+        "body": {
+          "op": "submit",
+          "code": "{code}",
+          "wallet": "0x…",
+          "message": "<from agentChallenge>",
+          "signature": "hex",
+          "signatureRecovery": "optional"
+        },
+        "returns": "ok (no token; the browser polls for its session)"
+      },
+      "browserPoll": {
+        "method": "POST",
+        "url": "https://agentic-quest.vercel.app/api/auth/link",
+        "body": {
+          "op": "poll",
+          "code": "{code}",
+          "pollSecret": "<browser only>"
+        },
+        "returns": "status pending | done with token (24h, read-only), once"
+      },
+      "limits": "code valid 10 minutes, single use; session only released to the holder of pollSecret"
+    }
+  },
+  "endpoints": [
+    {
+      "name": "listCampaigns",
+      "method": "GET",
+      "url": "https://agentic-quest.vercel.app/api/campaigns?wallet={address}&id={optional}&creator={optional}",
+      "auth": "optional"
+    },
+    {
+      "name": "verifyQuote",
+      "method": "POST",
+      "url": "https://agentic-quest.vercel.app/api/verify-quote",
+      "body": {
+        "campaignId": "1",
+        "postUrl": "https://x.com/<user>/status/<id>",
+        "wallet": "0x…"
+      },
+      "auth": "optional Bearer token (must match wallet)",
+      "returns": "voucher + tx {to,data,value,agenticWallet.preview}"
+    },
+    {
+      "name": "publishRules",
+      "method": "GET",
+      "url": "https://agentic-quest.vercel.app/api/publish",
+      "returns": "minBudget (1 USDT), maxBudget none, maxFcfsRewardPerClaim, creatorNeedsAgentId, creationOpen, platformFee 0"
+    },
+    {
+      "name": "publishQuest",
+      "method": "POST",
+      "url": "https://agentic-quest.vercel.app/api/publish",
+      "body": {
+        "wallet": "0x…",
+        "title": "Quote our launch post",
+        "mode": "FCFS|RANDOM",
+        "rewardPerClaim": "0.10 (FCFS only)",
+        "maxClaims": 50,
+        "budget": "1",
+        "postUrl": "https://x.com/<you>/status/<id> (optional)",
+        "durationDays": 7
+      },
+      "auth": "optional Bearer token (must match wallet)",
+      "returns": "steps[]: 1) approve(QuestRewards, budget) exact; 2) createQuest(...) — each with agenticWallet.preview; warnings[]"
+    },
+    {
+      "name": "manageQuest",
+      "method": "POST",
+      "url": "https://agentic-quest.vercel.app/api/manage",
+      "body": {
+        "wallet": "0x…",
+        "id": "3",
+        "action": "pause|resume|setPost|withdraw|fund",
+        "postUrl": "setPost only",
+        "amount": "withdraw/fund"
+      },
+      "returns": "steps[] (creator-only except fund)"
+    }
+  ],
+  "transactions": {
+    "claim": "claim(uint256 id, bytes32 xPostIdHash, bytes32 xAccountIdHash, uint256 deadline, bytes signature) — calldata returned by verifyQuote",
+    "settle": "settle(uint256 id) — RANDOM only; calldata returned as you.nextTx by listCampaigns when ready",
+    "send": [
+      "baw contract-call preview --binanceChainId 56 --from <wallet> --to <contract> --value 0 --inputData <data> --json",
+      "show parsed tx + risks, wait for owner 'yes'",
+      "baw contract-call execute --requestId <id> --json"
+    ],
+    "createQuest": "createQuest(uint8 mode, uint256 fcfsAmount, uint32 maxClaims, uint64 endTime, string targetPostId, string title, uint256 budget) — creates + funds; preceded by an exact approve",
+    "creator": "setCampaignPaused(id,bool), setTargetPost(id,string) before first claim, withdrawCampaignLeftover(id,amount,to) after end or while paused"
+  },
+  "note": "Contract names (ProofQuest, QuestRewards) and EIP-712 voucher domains ('ProofQuest RewardDrop', 'ProofQuest QuestRewards' v1) keep their original names on purpose. Login message domain: 'Agentic Quest'.",
+  "aliases": [
+    "https://proofquest-five.vercel.app"
+  ],
+  "permissions": {
+    "creator": [
+      "pause/resume own quest",
+      "set own quest's X post before its first claim",
+      "withdraw own unreserved leftover after the end, or while paused/blocked/globally paused"
+    ],
+    "platformOwner": [
+      "pause/unpause all new claims",
+      "block/unblock one quest's new claims (moderation)",
+      "rotate voucher signer",
+      "set creation rules (open, Agent ID required, min budget)",
+      "withdraw tokens never credited to any quest",
+      "transfer/renounce ownership"
+    ],
+    "nobody": [
+      "withdraw funds reserved for pending claims",
+      "move another creator's quest funds (owner included)"
+    ],
+    "fee": "0"
+  }
+}

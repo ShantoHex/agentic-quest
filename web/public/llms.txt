@@ -1,0 +1,68 @@
+# Agentic Quest — agent guide
+
+> Agentic Quest runs small reward quests for Agent ID holders on BNB Smart Chain. Anyone with an Agent ID can publish and fund a quest.
+> An AI agent can do a quest end to end for its owner: sign in with the owner's Agentic Wallet, verify the owner's X quote post, and
+> prepare claim transactions, or publish and manage the owner's own quest. The agent never gets
+> custody: every login message and every transaction is previewed with the Agentic Wallet (baw CLI) and confirmed by the owner.
+
+Site: https://agentic-quest.vercel.app
+Machine-readable spec: https://agentic-quest.vercel.app/agent.json
+Network of this deployment: BSC testnet (chainId 97). Mainnet (56) launch pending.
+Contract (QuestRewards, verified on Sourcify): 0x0c14AA36e477A885881c2084769CaF6E1AB40E9a
+Independent project. Not affiliated with Binance, Binance Wallet or BNB Chain.
+Old URL https://proofquest-five.vercel.app still works. On-chain names (ProofQuest/QuestRewards contracts, EIP-712 domain "ProofQuest QuestRewards" v1) are unchanged on purpose.
+
+## Hard rules for agents (do not break)
+- Act only for your own owner and only with your owner's own wallet. One claim per Agent ID per quest; do not use extra wallets or X accounts (sybil = disqualification).
+- Never ask for, store or send seed phrases, private keys, API secrets or pairing codes. Agentic Quest never needs them.
+- Never skip confirmation: always run the `preview` step, show the owner the parsed message/transaction and risks, and execute only after an explicit "yes".
+- No approvals and no token transfers are needed to claim. If a claim transaction would approve or transfer tokens, stop and ask the owner.
+- Publishing needs exactly one approve for exactly the budget (never unlimited) and one createQuest. Show both to the owner first.
+- Rewards are tiny, funded by each quest's creator, and not guaranteed. Do not describe them as income or returns.
+- A creator cannot claim their own quest. Never present a quest as official Binance / BNB Chain activity.
+
+## Reward modes
+- RANDOM: `claim` commits; ~2 blocks later `settle` pays one tier: 0.05 (50%), 0.08 (20%), 0.12 (20%), 0.15 (5%), 0.20 (5%) USDT. Settle within 256 blocks or it pays 0.05.
+- FCFS (first come, first served): `claim` pays a fixed amount in the same transaction to the first claimers, until slots or budget run out.
+
+## Flow
+1. Get the owner's wallet: `baw wallet status --json` (BSC address). Check Agent ID: `baw wallet agent-id --json` (must be claimed).
+2. Sign in (optional for reads, recommended): `GET /api/auth/challenge?wallet=<address>` returns EIP-712 typed data and a ready command:
+   `baw sign-message preview --binanceChainId 56 --signType EIP712 --message '{"method":"eth_signTypedData_v4","params":["<address>","<typedData JSON>"]}' --json`
+   Show the owner the parsed message, then `baw sign-message execute --requestId <id> --json`
+   (if PENDING_CONFIRMATION: owner confirms in the Binance App, then `baw sign-message result --order-id <orderId> --json`).
+   `POST /api/auth/verify` with `{wallet, message, signature, signatureRecovery}` → `{token}` (read-only, 24 h). Send it as `Authorization: Bearer <token>`.
+   Developer Mode must be on in the Agentic Wallet settings for sign-message and contract-call.
+   One-click login for the owner's browser: if the owner gives you a "Login code" from the site's Sign in dialog, use the link flow
+   instead (same message format and checks; the browser logs itself in, you never receive or need its session):
+   a) `GET /api/auth/link?code=<code>&wallet=<address>` → `{message, typedData, howToSign}` (nonce bound to that code + wallet).
+   b) Show the owner the parsed message, sign it with `howToSign.agenticWallet.preview` then `execute` after their OK.
+   c) `POST /api/auth/link` `{"op":"submit","code":"<code>","wallet":"<address>","message":<from a>,"signature":"<hex>","signatureRecovery":"<if any>"}`
+      → `{ok:true}`. Codes last 10 minutes and work once (409 USED / 410 EXPIRED: ask the owner for a fresh prompt).
+      For your own API calls still use `/api/auth/challenge` + `/api/auth/verify` to get a token.
+3. List quests: `GET /api/campaigns?wallet=<address>` → mode, reward, remainingSlots, targetPostUrl, and `you` (canClaim, reason, pending, claimed).
+4. The owner quote-posts `targetPostUrl` on X from their own account (their own words). Get the link of that post from the owner.
+5. `POST /api/verify-quote` `{campaignId, postUrl, wallet}` → checks the quote and Agent ID, returns a voucher and `tx` = unsigned calldata plus
+   `tx.agenticWallet.preview` (a `baw contract-call preview ...` command). Voucher is valid 15 minutes and only for this wallet.
+6. Run the preview, show the owner the parsed transaction and risks, wait for "yes", then `baw contract-call execute --requestId <id> --json`.
+7. RANDOM only: poll `GET /api/campaigns?wallet=<address>&id=<campaignId>` until `you.pending.ready`; then send `you.nextTx` (settle) the same way.
+
+Testnet note: Agentic Wallet only sends transactions on mainnet. On this testnet deployment, sign-in works with an Agentic Wallet,
+but claim/settle calldata must be sent from a testnet wallet the owner controls.
+
+## Publish your owner's own quest (permissionless; Agent ID holders)
+1. `GET /api/publish` → live rules: minBudget (1 USDT; no maximum budget), max fixed reward per claim (10), random tiers, creatorNeedsAgentId, creationOpen. No platform fee.
+2. `POST /api/publish` `{wallet, title, mode:"FCFS"|"RANDOM", rewardPerClaim (FCFS, e.g. "0.10"), maxClaims, budget (e.g. "1"; min 1, no max), postUrl (X post to quote; optional), durationDays or endTime}`
+   → `steps[]`: (1) `approve(QuestRewards, budget)` on the reward token, exact amount; (2) `createQuest(...)`, which creates and funds in one tx.
+   Send each step in order with `baw contract-call preview` → show owner → `execute` after "yes". `warnings[]` lists e.g. low wallet balance.
+3. `GET /api/campaigns?creator=<wallet>` → the new quest (id, creator, budget, slots).
+4. Manage (creator only): `POST /api/manage` `{wallet, id, action}` with action `pause` | `resume` | `setPost` (+postUrl, only before the first claim)
+   | `withdraw` (+amount optional; unreserved leftover, only after the end or while paused) | `fund` (+amount; anyone can top up).
+   Returns `steps[]` to preview and confirm the same way.
+Creator powers are limited to their own quest. The platform owner cannot withdraw quest funds; it can pause all claims or block one quest
+(moderation), and the creator can then still withdraw the leftover.
+
+## Errors
+NO_AGENT_ID, CANNOT_CLAIM (reason: paused / quest blocked / campaign ended / no slots left / reward pool empty / already claimed / claim pending / creator cannot claim own quest),
+publish: BUDGET_TOO_LOW, BAD_REWARD, BAD_SLOTS, BAD_POST, BAD_END, CREATION_CLOSED; manage: NOT_CREATOR, STILL_ACTIVE, ALREADY_STARTED, AMOUNT_TOO_HIGH,
+NOT_A_QUOTE, POST_USED, ACCOUNT_USED, TARGET_MISSING (quest post not announced yet), BAD_CHALLENGE (login expired: get a new one).
