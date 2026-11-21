@@ -243,7 +243,49 @@
       "abi": "abi/QuestRewards.json",
       "sourcify": "https://repo.sourcify.dev/97/0x0D812bad0A7804a24CeB5bEccf84E2f6916c866D",
       "verification": "exact match (creation + runtime), job 383947e0-10ed-4811-92b2-62bc71b850ce",
-      "e2e": {}
+      "e2e": {
+        "date": "2026-11-21",
+        "via": "live https://agentic-quest.vercel.app API (publish, manage setPost, verify-quote, campaigns) + throwaway test wallets",
+        "creator": "0xC188AB81B00cfc0D3c6483159C9a439c5B0516f0 (mock handle questmaker1)",
+        "claimer": "0x1Bb8a99d9D6c8cD005da5855Cb5372Fa0b70E2d6 (mock handle rewarde2e1)",
+        "xFixture": "target = public @BNBCHAIN post 2122973166758945045; proofs = public quotes 2123831188465013196 (FCFS) and 2123840907875422618 (RANDOM)",
+        "fcfsQuest": {
+          "id": 1,
+          "reward": "0.05",
+          "slots": 2,
+          "budget": "0.1"
+        },
+        "randomQuest": {
+          "id": 2,
+          "tiers": "0.05/30%, 0.10/50%, 0.20/20%",
+          "slots": 2,
+          "budget": "0.4"
+        },
+        "results": [
+          "reward 0.04 rejected: REWARD_TOO_LOW",
+          "budget 0.09 rejected: BUDGET_TOO_LOW",
+          "fcfs: quest #1 created via /api/publish without an X post ({\"title\":\"v5 e2e FCFS 0.05\",\"mode\":\"FCFS\",\"rewardPerClaim\":\"0.05\",\"reservedPerClaim\":\"0.05\",\"maxClaims\":2,\"budget\":\"0.1\",\"slotsCoveredByBudget\":\"2\",\"targetPostId\":null,\"endTime\":null})",
+          "fcfs: X post set later via /api/manage setPost",
+          "fcfs: claimer @rewarde2e1 paid 0.05 USDT in the claim tx",
+          "fcfs: second claim rejected: CANNOT_CLAIM",
+          "random: quest #2 created via /api/publish without an X post ({\"title\":\"v5 e2e RANDOM tiers\",\"mode\":\"RANDOM\",\"rewardPerClaim\":\"random\",\"tiers\":[{\"amount\":\"0.05\",\"chancePct\":30},{\"amount\":\"0.1\",\"chancePct\":50},{\"amount\":\"0.2\",\"chancePct\":20}],\"reservedPerClaim\":\"0.2\",\"maxClaims\":2,\"budget\":\"0.4\",\"slotsCoveredByBudget\":\"2\",\"targetPostId\":null,\"endTime\":null})",
+          "random: X post set later via /api/manage setPost",
+          "random: voucher has serverCommit 0xaca426ae\u2026, userCommit matches ours: true, server returned no userSecret: true",
+          "random: wrong userSecret gets no settle tx: true",
+          "random: settled, claimer won 0.2 USDT (tiers 0.05/30%, 0.10/50%, 0.20/20%)"
+        ],
+        "txs": {
+          "fcfs_1": "0x0bcfdad43b46bd9858768bae5f3f16dc9c715a8675b156689283c43c98b860ea",
+          "fcfs_2": "0x62c29c79dc18a5b32a6c7814e2a962adecaac33007618078b92c0f3f896e3977",
+          "fcfs_setPost": "0xaa105bb88575e6bdccb602577df10cec43ac3717d9ea3980659ff4fbc532cc37",
+          "fcfs_claim": "0x239eb1e83a1a6f81066ce73cff10379f93cb304ecea0b9e47afe7c7077feeea4",
+          "random_1": "0xc345c73ea05d4a949c8f0049c4a3d3d37487553d8ceb6c7733b965fbdf56ec17",
+          "random_2": "0x0c0324fa26c339cf246e79fdfd423f8574c9c5c5d6ea08668f1c7792c6dbc098",
+          "random_setPost": "0x280fe3df02fc3b1f32a7ed9ac7d25e8832fbf1417210d741dbdc141175c8a951",
+          "random_commit": "0x34e5209df6675284335ad1afcd87ea7287e4b20e691081335cb036e54c1ae33c",
+          "random_settle": "0x3d2152f5605ec5d82e8cbf4ca5e230865195c63044ca541b26d7c0e8c01abf24"
+        }
+      }
     }
   },
   "actions": {
