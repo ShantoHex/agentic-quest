@@ -1,0 +1,18 @@
+{
+  "chainId": 56,
+  "QuestRewards": "0xCE3277D3Cbf7e0785627A63dA7Bb595669322d19",
+  "version": "v5-tiers",
+  "eip712Version": "2",
+  "owner": "0x50EF873dBfAB2A5716FbaDAAA03712fFC7d0797e",
+  "signer": "0xdA82B73C7a6C3b2aC1A64AA030fc211623842cEa",
+  "agentIdRegistry": "0x60B9262456dE011F7d15a54CdD8c48bAaa8B022F",
+  "usdt": "0x55d398326f99059fF775485246999027B3197955",
+  "deployTx": "0x066f8775baf1bdca83d2666b894476011d721ca9abf8489a4752eb15339f378d",
+  "setSignerTx": "0xd4aa718d95673df3cdfb30aa681a9ef5a18e116526e33e66becd311537b0674e",
+  "deployedAt": "2026-11-21",
+  "verified": {
+    "bscscan": "https://bscscan.com/address/0xCE3277D3Cbf7e0785627A63dA7Bb595669322d19#code",
+    "sourcify": "https://repo.sourcify.dev/56/0xCE3277D3Cbf7e0785627A63dA7Bb595669322d19"
+  },
+  "campaigns": "none at launch (creators publish from the site)"
+}

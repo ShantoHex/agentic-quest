@@ -35,7 +35,7 @@ export const NETWORKS: Record<"testnet" | "mainnet", Net> = {
     name: "BSC",
     rpc: "https://bsc-dataseed.bnbchain.org",
     explorer: "https://bscscan.com",
-    questRewards: "",
+    questRewards: "0xCE3277D3Cbf7e0785627A63dA7Bb595669322d19",
     agentIdRegistry: "0x60B9262456dE011F7d15a54CdD8c48bAaa8B022F", // SPACE ID Agent ID (official)
     usdt: "0x55d398326f99059fF775485246999027B3197955", // BSC-USD
     mockRegistry: false,
