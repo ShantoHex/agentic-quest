@@ -146,7 +146,7 @@ export function QuestPage() {
         <li>
           <strong>Quote the quest post on X</strong>
           {c.targetPostUrl
-            ? <a className="btn btn-secondary btn-fit" href={`https://x.com/intent/tweet?url=${encodeURIComponent(c.targetPostUrl)}`} target="_blank" rel="noreferrer">Quote on X ↗</a>
+            ? <a className="btn btn-secondary btn-fit" href={`https://x.com/intent/tweet?url=${encodeURIComponent(c.targetPostUrl)}&text=${encodeURIComponent("Just claimed $0.2 on Agentic Quest ✅\n\nNow claim yours → https://agentic-quest.vercel.app\n\n#AgenticQuest #BinanceWalletHackathon #AgenticWallet")}`} target="_blank" rel="noreferrer">Quote on X ↗</a>
             : <span className="small muted">The post for this quest isn't announced yet.</span>}
         </li>
         <li className={you?.claimed ? "done" : ""}>
