@@ -297,11 +297,11 @@ Base: `https://agentic-quest.vercel.app` · full spec `/agent.json` · prose gui
 |---|---|
 | `GET /api/auth/challenge?wallet=0x…` | EIP-712 login challenge (10 min) + `baw sign-message preview` command |
 | `POST /api/auth/verify` `{wallet,message,signature,signatureRecovery?}` | verifies, returns read-only bearer token (24 h) |
-| `GET /api/campaigns?wallet=0x…[&id=N]` | campaigns (mode, reward, remainingSlots, targetPostUrl) + per-wallet status; `you.nextTx` = settle calldata when ready |
-| `POST /api/verify-quote` `{campaignId,postUrl,wallet}` | checks the quote post against the campaign's on-chain `targetPostId`, returns voucher + claim calldata (`tx`) |
+| `GET /api/campaigns?wallet=0x…[&id=N][&userSecret=0x…]` | campaigns (mode, reward incl. RANDOM `tiers`, remainingSlots, targetPostUrl) + per-wallet status; RANDOM: after the target block `you.pending.serverSecret` is revealed and, with your `userSecret`, `you.nextTx` = `settle(id, userSecret, serverSecret)` calldata (after the reveal window: lowest-tier settle without secrets) |
+| `POST /api/verify-quote` `{campaignId,postUrl,wallet,userCommit?}` | checks the quote post against the campaign's on-chain `targetPostId`, returns voucher (`serverCommit`, `userCommit`) + claim calldata (`tx`). RANDOM: send `userCommit = keccak256(userSecret)`; if omitted a `userSecret` is generated and returned once |
 | `POST /api/verify-quote` without `campaignId` | legacy RewardDrop v2 voucher (unchanged) |
-| `GET /api/publish` | live creation rules (min budget 1, no max budget, max fixed reward, Agent ID required, open) |
-| `POST /api/publish` `{wallet,title,mode,rewardPerClaim?,maxClaims,budget,postUrl?,durationDays?\|endTime?}` | `steps[]`: exact `approve(QuestRewards, budget)` (skipped if allowance suffices) + `createQuest` calldata, each with `agenticWallet.preview`; `warnings[]` |
+| `GET /api/publish` | live creation rules (min budget 0.1, no max budget, min reward 0.05 per claimer with no max, RANDOM tier rules, Agent ID required, open) |
+| `POST /api/publish` `{wallet,title,mode,rewardPerClaim? (FCFS),tiers? (RANDOM: [{amount,chancePct}], 1-5, total 100),maxClaims,budget,postUrl? (optional),durationDays?\|endTime?}` | `steps[]`: exact `approve(QuestRewards, budget)` (skipped if allowance suffices) + `createQuest` calldata, each with `agenticWallet.preview`; `warnings[]` |
 | `POST /api/manage` `{wallet,id,action,postUrl?,amount?}` | creator actions `pause`/`resume`/`setPost`/`withdraw`, or `fund` (anyone): `steps[]` |
 | `GET /api/campaigns?creator=0x…` | quests published by a wallet; every campaign includes `creator` and `blocked` |
 
@@ -311,5 +311,6 @@ show the owner the parsed tx and risks, then `baw contract-call execute --reques
 Developer Mode must be enabled in the Agentic Wallet (Binance App) for both commands.
 
 Server env: `SIGNER_PRIVATE_KEY` (voucher signer, already set), optional `AUTH_SECRET` (≥32 chars, HMAC for login/session;
-falls back to a hash derived from the signer key), `QUEST_REWARDS_ADDRESS` (default from `web/api/_networks.ts`), `HIDDEN_QUESTS` (comma-separated quest IDs hidden from listings).
+falls back to a hash derived from the signer key), optional `RANDOM_SECRET` (≥32 chars, key for the RANDOM server secrets; falls back to a hash derived
+from the signer key; rotate only when no RANDOM claim is pending), `QUEST_REWARDS_ADDRESS` (default from `web/api/_networks.ts`), `HIDDEN_QUESTS` (comma-separated quest IDs hidden from listings).
 The campaign's X post to quote is read on-chain (`targetPostId`), so `TARGET_POST_ID` is only used by the legacy v2 path.

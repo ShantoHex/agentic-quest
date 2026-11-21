@@ -20,7 +20,7 @@ export const NETWORKS: Record<"testnet" | "mainnet", Net> = {
     name: "BSC Testnet",
     rpc: "https://bsc-testnet-dataseed.bnbchain.org",
     explorer: "https://testnet.bscscan.com",
-    questRewards: "0x0c14AA36e477A885881c2084769CaF6E1AB40E9a",
+    questRewards: "0x0D812bad0A7804a24CeB5bEccf84E2f6916c866D",
     agentIdRegistry: "0xD126FBafc7e7a609056e421187A0286FFC27e5c5", // MockAgentID
     usdt: "0x6898e0e131FDB06b9Ae8d4C3f4475438F04c3398", // test USDT
     mockRegistry: true,

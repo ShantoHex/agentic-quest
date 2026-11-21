@@ -120,13 +120,15 @@ Follow https://agentic-quest.vercel.app/llms.txt. Summary: sign the EIP-712 logi
 "Login code", use `GET /api/auth/link?code=&wallet=` → sign → `POST /api/auth/link {op:"submit",…}` and their browser logs in by itself; list `/api/campaigns?wallet=`; after the owner
 quote-posts the campaign's `targetPostUrl`, `POST /api/verify-quote {campaignId, postUrl, wallet}`; run the returned
 `tx.agenticWallet.preview`, show the owner the parsed transaction and risks, and `execute` only after explicit confirmation.
-RANDOM campaigns need a second `settle` transaction (`you.nextTx`) about 2 blocks later. One claim per Agent ID per campaign;
+RANDOM campaigns are commit-reveal: send `userCommit = keccak256(userSecret)` with verify-quote (keep `userSecret`), then about 2 blocks later
+send the `settle` transaction from `GET /api/campaigns?wallet=&id=&userSecret=` (`you.nextTx`). One claim per Agent ID per campaign;
 never use other wallets or X accounts.
 
 ## Publish your owner's own quest (QuestRewards) — user confirmation required
 
-Anyone with an Agent ID can publish and fund a quest. `GET /api/publish` for the live rules (min budget 1 USDT, no maximum, fixed reward ≤ 10 per
-claim, random 0.05–0.20, no fee). `POST /api/publish {wallet, title, mode, rewardPerClaim?, maxClaims, budget, postUrl?, durationDays?}`
+Anyone with an Agent ID can publish and fund a quest. `GET /api/publish` for the live rules (min budget 0.1 USDT, no maximum; every reward
+≥ 0.05 per claimer, no maximum; RANDOM = 1-5 creator tiers whose chances total 100%, default 30/50/20; no fee).
+`POST /api/publish {wallet, title, mode, rewardPerClaim? (FCFS), tiers? (RANDOM: [{amount, chancePct}]), maxClaims, budget, postUrl? (optional; set later via setPost), durationDays?}`
 returns `steps[]`: (1) approve EXACTLY `budget` of the reward token to QuestRewards (never unlimited), (2) `createQuest`, which creates
 and funds in one tx. For each step: `baw contract-call preview …` → show the owner the parsed tx and risks → `execute` only after "yes".
 Manage it with `POST /api/manage {wallet, id, action: pause|resume|setPost|withdraw|fund}` (creator only, except fund). The creator

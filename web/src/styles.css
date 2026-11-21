@@ -291,3 +291,17 @@ select { padding-right: 8px; font-size: 15px; }
 .agent-box .codebox { margin: 2px 0; }
 .agent-box .btn-primary { background: var(--green); color: var(--white); }
 .agent-box .btn-primary:hover:not(:disabled) { color: var(--white); }
+
+/* Reward tiers editor (RANDOM quests) */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.tiers { padding: 14px; border: var(--line); border-radius: var(--r); background: #f4fff6; }
+.tier-head, .tier-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px 44px; gap: 10px; align-items: center; }
+.tier-head { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.tier-chance { position: relative; }
+.tier-chance input { padding-right: 28px; text-align: right; font-family: var(--mono); }
+.tier-chance i { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-style: normal; font-weight: 700; color: var(--ink-2); pointer-events: none; }
+.tier-row input { width: 100%; min-width: 0; }
+.tier-x { padding: 0; min-width: 44px; }
+.tier-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.tier-list li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 2px solid var(--ink); border-radius: 10px; background: var(--white); font-family: var(--mono); font-size: 15px; }
+.tier-list li span:last-child { font-weight: 700; color: var(--green-d); }

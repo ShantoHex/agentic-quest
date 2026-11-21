@@ -52,21 +52,25 @@ export const qrAbi = [
   { type: "function", name: "signer", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
   { type: "function", name: "paused", stateMutability: "view", inputs: [], outputs: [{ type: "bool" }] },
   { type: "function", name: "token", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-  { type: "function", name: "tiers", stateMutability: "view", inputs: [], outputs: [{ type: "uint256[5]" }, { type: "uint8[5]" }] },
+  { type: "function", name: "tiersOf", stateMutability: "view", inputs: [{ type: "uint256" }], outputs: [{ type: "uint256[]" }, { type: "uint8[]" }] },
+  { type: "function", name: "rewardUnit", stateMutability: "view", inputs: [{ type: "uint256" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "lowestReward", stateMutability: "view", inputs: [{ type: "uint256" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "pendingCommits", stateMutability: "view", inputs: [{ type: "uint256" }, { type: "address" }], outputs: [{ type: "bytes32" }, { type: "bytes32" }] },
   { type: "function", name: "creatorOf", stateMutability: "view", inputs: [{ type: "uint256" }], outputs: [{ type: "address" }] },
   { type: "function", name: "questBlocked", stateMutability: "view", inputs: [{ type: "uint256" }], outputs: [{ type: "bool" }] },
   { type: "function", name: "creationOpen", stateMutability: "view", inputs: [], outputs: [{ type: "bool" }] },
   { type: "function", name: "creatorNeedsAgentId", stateMutability: "view", inputs: [], outputs: [{ type: "bool" }] },
   { type: "function", name: "minBudget", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
-  { type: "function", name: "maxFcfsAmount", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "minReward", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
   { type: "function", name: "owner", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
-  { type: "function", name: "createQuest", stateMutability: "nonpayable", inputs: [{ name: "mode", type: "uint8" }, { name: "fcfsAmount", type: "uint256" }, { name: "maxClaims", type: "uint32" }, { name: "endTime", type: "uint64" }, { name: "targetPostId", type: "string" }, { name: "title", type: "string" }, { name: "budget", type: "uint256" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "createQuest", stateMutability: "nonpayable", inputs: [{ name: "mode", type: "uint8" }, { name: "fcfsAmount", type: "uint256" }, { name: "tierAmounts", type: "uint256[]" }, { name: "tierChances", type: "uint8[]" }, { name: "maxClaims", type: "uint32" }, { name: "endTime", type: "uint64" }, { name: "targetPostId", type: "string" }, { name: "title", type: "string" }, { name: "budget", type: "uint256" }], outputs: [{ type: "uint256" }] },
   { type: "function", name: "fundCampaign", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }, { name: "amount", type: "uint256" }], outputs: [] },
   { type: "function", name: "setCampaignPaused", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }, { name: "p", type: "bool" }], outputs: [] },
   { type: "function", name: "setTargetPost", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }, { name: "targetPostId", type: "string" }], outputs: [] },
   { type: "function", name: "withdrawCampaignLeftover", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }, { name: "amount", type: "uint256" }, { name: "to", type: "address" }], outputs: [] },
-  { type: "function", name: "claim", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }, { name: "xPostIdHash", type: "bytes32" }, { name: "xAccountIdHash", type: "bytes32" }, { name: "deadline", type: "uint256" }, { name: "signature", type: "bytes" }], outputs: [{ type: "uint256" }] },
-  { type: "function", name: "settle", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "claim", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }, { name: "xPostIdHash", type: "bytes32" }, { name: "xAccountIdHash", type: "bytes32" }, { name: "serverCommit", type: "bytes32" }, { name: "userCommit", type: "bytes32" }, { name: "deadline", type: "uint256" }, { name: "signature", type: "bytes" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "settle", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }, { name: "userSecret", type: "bytes32" }, { name: "serverSecret", type: "bytes32" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "settleExpired", stateMutability: "nonpayable", inputs: [{ name: "id", type: "uint256" }, { name: "user", type: "address" }], outputs: [{ type: "uint256" }] },
 ] as const;
 
 export type Json = Record<string, unknown>;
@@ -249,9 +253,32 @@ export function txFor(from: Address, data: Hex, label: string, toAddr?: Address)
   };
 }
 
-export const encodeClaim = (id: bigint, post: Hex, acct: Hex, deadline: bigint, sig: Hex) =>
-  encodeFunctionData({ abi: qrAbi, functionName: "claim", args: [id, post, acct, deadline, sig] });
-export const encodeSettle = (id: bigint) => encodeFunctionData({ abi: qrAbi, functionName: "settle", args: [id] });
+export const ZERO32 = "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex;
+export const encodeClaim = (id: bigint, post: Hex, acct: Hex, serverCommit: Hex, userCommit: Hex, deadline: bigint, sig: Hex) =>
+  encodeFunctionData({ abi: qrAbi, functionName: "claim", args: [id, post, acct, serverCommit, userCommit, deadline, sig] });
+export const encodeSettle = (id: bigint, userSecret: Hex, serverSecret: Hex) =>
+  encodeFunctionData({ abi: qrAbi, functionName: "settle", args: [id, userSecret, serverSecret] });
+
+/** EIP-712 domain of the QuestRewards voucher (v5 contract = version "2"). */
+export const VOUCHER_DOMAIN_NAME = "ProofQuest QuestRewards";
+export const VOUCHER_DOMAIN_VERSION = "2";
+
+// ---------------------------------------------------------------- RANDOM commit-reveal (server half)
+
+/** Key for the server's per-claim random secret. RANDOM_SECRET if set, else a domain-separated hash of
+ *  the voucher key. Rotating it invalidates reveals for claims still pending (they settle at the lowest tier). */
+function randomKey(): Buffer {
+  const s = (process.env.RANDOM_SECRET || "").trim();
+  if (s.length >= 32) return Buffer.from(s);
+  return createHash("sha256").update("proofquest-random-v1|" + (signerKey() || "dev-only")).digest();
+}
+/** Deterministic server secret for one claim. Its keccak256 is signed into the voucher BEFORE the claim;
+ *  the secret itself is only revealed after the claim's target block is mined. */
+export function serverSecretFor(id: bigint, user: Address, handleHash: Hex): Hex {
+  const mac = createHmac("sha256", randomKey()).update(`qr-random|${CHAIN_ID}|${QUEST_REWARDS.toLowerCase()}|${id}|${user.toLowerCase()}|${handleHash.toLowerCase()}`).digest("hex");
+  return `0x${mac}` as Hex;
+}
+export const isBytes32 = (v: unknown): v is Hex => typeof v === "string" && /^0x[0-9a-fA-F]{64}$/.test(v) && !/^0x0{64}$/.test(v);
 
 /** Accepts an X post link (https://x.com/u/status/123) or a bare numeric ID. Returns the decimal ID or null. */
 export function parsePostRef(raw: unknown): string | null {
@@ -267,11 +294,11 @@ export function parsePostRef(raw: unknown): string | null {
 /** Creation rules read live from the contract. */
 export async function creationConfig() {
   const c = { address: QUEST_REWARDS, abi: qrAbi } as const;
-  const [open, needsAgentId, minBudget, maxFcfs, owner, token] = await Promise.all([
+  const [open, needsAgentId, minBudget, minReward, owner, token] = await Promise.all([
     client.readContract({ ...c, functionName: "creationOpen" }),
     client.readContract({ ...c, functionName: "creatorNeedsAgentId" }),
     client.readContract({ ...c, functionName: "minBudget" }),
-    client.readContract({ ...c, functionName: "maxFcfsAmount" }),
+    client.readContract({ ...c, functionName: "minReward" }),
     client.readContract({ ...c, functionName: "owner" }),
     client.readContract({ ...c, functionName: "token" }),
   ]);
@@ -279,5 +306,5 @@ export async function creationConfig() {
     client.readContract({ address: token, abi: erc20Abi, functionName: "decimals" }),
     client.readContract({ address: token, abi: erc20Abi, functionName: "symbol" }),
   ]);
-  return { open, needsAgentId, minBudget, maxFcfs, owner, token, decimals, symbol };
+  return { open, needsAgentId, minBudget, minReward, owner, token, decimals, symbol };
 }

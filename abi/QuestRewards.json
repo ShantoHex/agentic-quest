@@ -74,6 +74,32 @@
   },
   {
     "type": "function",
+    "name": "HISTORY_STORAGE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "HISTORY_WINDOW",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MAX_CLAIMS_LIMIT",
     "inputs": [],
     "outputs": [
@@ -81,6 +107,19 @@
         "name": "",
         "type": "uint32",
         "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_TIERS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -236,6 +275,16 @@
         "internalType": "bytes32"
       },
       {
+        "name": "serverCommit",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "userCommit",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
         "name": "deadline",
         "type": "uint256",
         "internalType": "uint256"
@@ -268,6 +317,16 @@
         "name": "fcfsAmount",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "tierAmounts",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "tierChances",
+        "type": "uint8[]",
+        "internalType": "uint8[]"
       },
       {
         "name": "maxClaims",
@@ -348,6 +407,19 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "defaultTierChances",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8[3]",
+        "internalType": "uint8[3]"
+      }
+    ],
+    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -588,6 +660,11 @@
         "internalType": "bytes32"
       },
       {
+        "name": "serverCommit",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
         "name": "deadline",
         "type": "uint256",
         "internalType": "uint256"
@@ -647,8 +724,14 @@
   },
   {
     "type": "function",
-    "name": "maxFcfsAmount",
-    "inputs": [],
+    "name": "lowestReward",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -661,6 +744,19 @@
   {
     "type": "function",
     "name": "minBudget",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "minReward",
     "inputs": [],
     "outputs": [
       {
@@ -755,6 +851,35 @@
   },
   {
     "type": "function",
+    "name": "pendingCommits",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "userCommit",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "serverCommit",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "pendingOwner",
     "inputs": [],
     "outputs": [
@@ -808,6 +933,16 @@
         "name": "handleHash",
         "type": "bytes32",
         "internalType": "bytes32"
+      },
+      {
+        "name": "userSecret",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "serverSecret",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [
@@ -858,6 +993,25 @@
         "name": "",
         "type": "bytes32",
         "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "rewardUnit",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -967,6 +1121,40 @@
         "name": "id",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "userSecret",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "serverSecret",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "settleExpired",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [
@@ -993,73 +1181,13 @@
   },
   {
     "type": "function",
-    "name": "tier0",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "tier1",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "tier2",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "tier3",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "tier4",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "tierFor",
     "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
       {
         "name": "seed",
         "type": "uint256",
@@ -1077,18 +1205,24 @@
   },
   {
     "type": "function",
-    "name": "tiers",
-    "inputs": [],
+    "name": "tiersOf",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
         "name": "amounts",
-        "type": "uint256[5]",
-        "internalType": "uint256[5]"
+        "type": "uint256[]",
+        "internalType": "uint256[]"
       },
       {
-        "name": "oddsPct",
-        "type": "uint8[5]",
-        "internalType": "uint8[5]"
+        "name": "chancesPct",
+        "type": "uint8[]",
+        "internalType": "uint8[]"
       }
     ],
     "stateMutability": "view"
@@ -1234,6 +1368,11 @@
       },
       {
         "name": "xAccountIdHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "serverCommit",
         "type": "bytes32",
         "internalType": "bytes32"
       },
@@ -1650,6 +1789,37 @@
   },
   {
     "type": "event",
+    "name": "RandomCommitted",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "user",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "userCommit",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "serverCommit",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "SignerUpdated",
     "inputs": [
       {
@@ -1682,6 +1852,31 @@
         "type": "string",
         "indexed": false,
         "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TiersSet",
+    "inputs": [
+      {
+        "name": "id",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "amounts",
+        "type": "uint256[]",
+        "indexed": false,
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "chancesPct",
+        "type": "uint8[]",
+        "indexed": false,
+        "internalType": "uint8[]"
       }
     ],
     "anonymous": false
@@ -1750,6 +1945,16 @@
   },
   {
     "type": "error",
+    "name": "BadReveal",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadTiers",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BudgetTooLow",
     "inputs": []
   },
@@ -1795,6 +2000,11 @@
   },
   {
     "type": "error",
+    "name": "MissingCommit",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NoAgentId",
     "inputs": []
   },
@@ -1811,6 +2021,11 @@
   {
     "type": "error",
     "name": "NotCreator",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotExpired",
     "inputs": []
   },
   {
@@ -1836,6 +2051,11 @@
   {
     "type": "error",
     "name": "ReentrantCall",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RewardTooLow",
     "inputs": []
   },
   {

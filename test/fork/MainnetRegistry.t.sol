@@ -16,15 +16,21 @@ contract MainnetRegistryForkTest is Test {
         address owner = makeAddr("owner");
         QuestRewards qr = new QuestRewards(REGISTRY, USDT, owner);
         assertEq(qr.tokenDecimals(), 18);
-        assertEq(qr.tier0(), 5e16);
-        assertEq(qr.minBudget(), 1e18);
+        assertEq(qr.minReward(), 5e16);
+        assertEq(qr.minBudget(), 1e17);
+        uint256[] memory none = new uint256[](0);
+        uint8[] memory noneC = new uint8[](0);
+        uint256[] memory amts = new uint256[](3);
+        uint8[] memory ch = new uint8[](3);
+        (amts[0], amts[1], amts[2]) = (5e16, 1e17, 2e17);
+        (ch[0], ch[1], ch[2]) = (30, 50, 20);
         deal(USDT, owner, 5e18);
         vm.startPrank(owner);
         qr.setSigner(makeAddr("signer"));
         (bool s,) =
             USDT.call(abi.encodeWithSignature("approve(address,uint256)", address(qr), 5e18));
         assertTrue(s);
-        qr.createQuest(QuestRewards.Mode.FCFS, 1e17, 10, 0, "", "fork", 5e18); // owner: no Agent ID needed
+        qr.createQuest(QuestRewards.Mode.FCFS, 1e17, none, noneC, 10, 0, "", "fork", 5e18); // owner: no Agent ID needed
         vm.stopPrank();
         (bool ok, string memory why) = qr.canClaim(1, HOLDER);
         assertTrue(ok, why); // real Agent ID check passed
@@ -36,7 +42,8 @@ contract MainnetRegistryForkTest is Test {
         vm.startPrank(HOLDER);
         (s,) = USDT.call(abi.encodeWithSignature("approve(address,uint256)", address(qr), 5e18));
         assertTrue(s);
-        uint256 id = qr.createQuest(QuestRewards.Mode.RANDOM, 0, 25, 0, "", "holder quest", 5e18);
+        uint256 id =
+            qr.createQuest(QuestRewards.Mode.RANDOM, 0, amts, ch, 25, 0, "", "holder quest", 5e18);
         vm.stopPrank();
         assertEq(qr.creatorOf(id), HOLDER);
         assertEq(qr.remainingSlots(id), 25);
@@ -45,7 +52,7 @@ contract MainnetRegistryForkTest is Test {
         vm.startPrank(stranger);
         (s,) = USDT.call(abi.encodeWithSignature("approve(address,uint256)", address(qr), 5e18));
         vm.expectRevert(QuestRewards.NoAgentId.selector);
-        qr.createQuest(QuestRewards.Mode.RANDOM, 0, 25, 0, "", "x", 5e18);
+        qr.createQuest(QuestRewards.Mode.RANDOM, 0, amts, ch, 25, 0, "", "x", 5e18);
         vm.stopPrank();
         assertEq(qr.remainingSlots(1), 10);
     }

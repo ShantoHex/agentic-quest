@@ -11,7 +11,11 @@ export function useFmt(token?: `0x${string}`) {
 }
 
 export function rewardText(c: Camp, fmt: (v?: string) => string) {
-  return c.reward.type === "fixed" ? fmt(c.reward.amount) : `${fmt(c.reward.tiers[0].amount).split(" ")[0]}–${fmt(c.reward.tiers[4].amount)}`;
+  if (c.reward.type === "fixed") return fmt(c.reward.amount);
+  const xs = c.reward.tiers.map((t) => BigInt(t.amount));
+  if (!xs.length) return "random";
+  const lo = xs.reduce((m, x) => (x < m ? x : m)), hi = xs.reduce((m, x) => (x > m ? x : m));
+  return lo === hi ? fmt(lo.toString()) : `${fmt(lo.toString()).split(" ")[0]}–${fmt(hi.toString())}`;
 }
 
 export function statusBadge(c: Camp) {

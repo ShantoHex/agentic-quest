@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { keccak256, toHex, type Hex } from "viem";
 import { Link, useParams } from "react-router-dom";
 import { useConfig } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
@@ -7,11 +8,24 @@ import { useAgentTx } from "../components/AgentTx";
 import { Bar } from "../components/ui";
 import { AgentSection } from "../components/AgentSection";
 import { QuestTasks, useQuestTaskState } from "../components/QuestTasks";
-import { explorerAddress, explorerTx, MOCK_REGISTRY, VERIFY_API } from "../config";
+import { CHAIN_ID, explorerAddress, explorerTx, MOCK_REGISTRY, QUEST_REWARDS, VERIFY_API } from "../config";
 import { fmtDate, short } from "../lib/format";
 import { useCampaigns, useMyAgentId, type Tx } from "../lib/hooks";
 import { useSession } from "../lib/session";
 import { rewardText, statusBadge, useFmt } from "./Home";
+
+/** RANDOM claims: the claimant's own secret, kept on this device until settle (its hash is committed on-chain). */
+const secretKey = (id: string, wallet: string) => `pq-rand-${CHAIN_ID}-${(QUEST_REWARDS ?? "").toLowerCase()}-${id}-${wallet.toLowerCase()}`;
+function loadSecret(id: string, wallet: string): Hex | null {
+  try { const v = localStorage.getItem(secretKey(id, wallet)); return v && /^0x[0-9a-f]{64}$/.test(v) ? (v as Hex) : null; } catch { return null; }
+}
+function newSecret(id: string, wallet: string): Hex {
+  const existing = loadSecret(id, wallet);
+  if (existing) return existing;
+  const s = toHex(crypto.getRandomValues(new Uint8Array(32)));
+  try { localStorage.setItem(secretKey(id, wallet), s); } catch { /* storage blocked: claim still works, settle falls back */ }
+  return s;
+}
 
 export function QuestPage() {
   const { id } = useParams();
@@ -47,13 +61,28 @@ export function QuestPage() {
       const r = await fetch(VERIFY_API, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
-        body: JSON.stringify({ campaignId: c.id, postUrl, wallet: session.wallet }),
+        body: JSON.stringify({ campaignId: c.id, postUrl, wallet: session.wallet, ...(c.mode === "RANDOM" ? { userCommit: keccak256(newSecret(c.id, session.wallet)) } : {}) }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "Verification failed.");
       setMsg({ tone: "ok", text: `Post verified (@${j.username}).` });
       await sendTx(j.tx);
     } catch (e) { setMsg({ tone: "err", text: e instanceof Error ? e.message : "Verification failed." }); }
+    setBusy(false);
+  }
+
+  async function settle() {
+    if (!session || !c) return;
+    setBusy(true); setMsg(null);
+    try {
+      const secret = loadSecret(c.id, session.wallet);
+      const r = await fetch(`/api/campaigns?wallet=${session.wallet}&id=${c.id}${secret ? `&userSecret=${secret}` : ""}`, { headers: { Authorization: `Bearer ${session.token}` } });
+      const j = await r.json();
+      const mine = (j.campaigns ?? []).find((x: { id: string }) => x.id === c.id);
+      const tx = mine?.you?.nextTx as Tx | undefined;
+      if (!tx) throw new Error(secret ? (mine?.you?.pending?.needUserSecret || mine?.you?.pending?.note || "Not ready to settle yet.") : "Your claim secret isn't on this device. Once the reveal window passes (about an hour), settling pays the lowest tier.");
+      await sendTx(tx);
+    } catch (e) { setMsg({ tone: "err", text: e instanceof Error ? e.message : "Settle failed." }); }
     setBusy(false);
   }
 
@@ -91,8 +120,13 @@ export function QuestPage() {
       <p className="q-note">
         {c.mode === "FCFS"
           ? "Fixed reward, paid in the claim transaction, to the first claimers until slots or budget run out."
-          : `Claim, wait ~2 blocks, then settle. Odds: ${c.reward.type === "random" ? c.reward.tiers.map((t) => `${fmt(t.amount)} ${t.oddsPct}%`).join(", ") : ""}. Settle within 256 blocks or it pays the lowest tier.`}
+          : "Claim, wait ~2 blocks, then settle. The draw mixes your secret, the server's secret and a future block hash, so nobody can pick the result. Settle within the reveal window (about an hour on BSC) or it pays the lowest tier."}
       </p>
+      {c.reward.type === "random" && (
+        <ul className="tier-list" aria-label="Reward tiers">
+          {c.reward.tiers.map((t, i) => <li key={i}><span>{fmt(t.amount)}</span><span>{t.oddsPct}%</span></li>)}
+        </ul>
+      )}
 
       <AgentSection questId={c.id} />
       <QuestTasks campaignId={c.id} session={session} />
@@ -119,8 +153,8 @@ export function QuestPage() {
             : you?.claimed ? <span className="small ok">Claimed{you.reward ? ` ${fmt(you.reward)}` : ""}.</span>
             : you?.pending ? (
               <>
-                <span className="small muted">{you.pending.ready ? (you.pending.expired ? "Past 256 blocks: settling pays the lowest tier." : "Ready to settle.") : `Waiting ${you.pending.blocksLeft} block(s)…`}</span>
-                <button className="btn btn-primary btn-fit" disabled={!you.nextTx} onClick={() => you.nextTx && sendTx(you.nextTx)}>Settle</button>
+                <span className="small muted">{you.pending.ready ? (you.pending.expired ? "Reveal window passed: settling pays the lowest tier." : "Ready to settle.") : `Waiting ${you.pending.blocksLeft} block(s)…`}</span>
+                <button className="btn btn-primary btn-fit" disabled={busy || !you.pending.ready} onClick={settle}>{busy ? "Preparing…" : "Settle"}</button>
               </>
             ) : you?.canClaim && c.targetPostId && tasksSatisfied ? (
               <>

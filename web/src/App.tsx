@@ -38,10 +38,10 @@ function Footer() {
             Anyone with an Agent ID can publish and fund a quest. Each quest's funds are separate. Its creator can pause it, set its X post
             (before the first claim) and withdraw its unreserved leftover after the end or while paused. The platform owner can: pause all
             new claims; block one quest's new claims (moderation; the creator can still withdraw); change the voucher signer; set creation
-            rules (open/closed, Agent ID required, minimum budget; currently 1 USDT, no maximum); withdraw only tokens never credited to any quest; transfer or renounce
+            rules (open/closed, Agent ID required, minimum budget; currently 0.1 USDT, no maximum); withdraw only tokens never credited to any quest; transfer or renounce
             ownership. The owner cannot withdraw quest funds. No proxy, no mint, no fee; funds reserved for pending claims can't be withdrawn.
-            Limits: one claim per Agent ID per quest; creators can't claim their own quest; max per claim 0.20 (random) or the quest's fixed
-            amount (max 10 tokens). Quests are run by their creators, not by Agentic Quest. Rewards are small and not guaranteed. No promised
+            Limits: one claim per Agent ID per quest; creators can't claim their own quest; every reward is at least 0.05
+            per claimer with no maximum (the quest's fixed amount, or its random tiers set by the creator; fixed at creation, nobody can change them). Quests are run by their creators, not by Agentic Quest. Rewards are small and not guaranteed. No promised
             return. Smart contracts can have bugs.
           </p>
         </details>

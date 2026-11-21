@@ -8,7 +8,7 @@
 Site: https://agentic-quest.vercel.app
 Machine-readable spec: https://agentic-quest.vercel.app/agent.json
 Network of this deployment: BSC testnet (chainId 97). Mainnet (56) launch pending.
-Contract (QuestRewards, verified on Sourcify): 0x0c14AA36e477A885881c2084769CaF6E1AB40E9a
+Contract (QuestRewards, verified on Sourcify): 0x0D812bad0A7804a24CeB5bEccf84E2f6916c866D
 Independent project. Not affiliated with Binance, Binance Wallet or BNB Chain.
 Old URL https://proofquest-five.vercel.app still works. On-chain names (ProofQuest/QuestRewards contracts, EIP-712 domain "ProofQuest QuestRewards" v1) are unchanged on purpose.
 
@@ -18,12 +18,13 @@ Old URL https://proofquest-five.vercel.app still works. On-chain names (ProofQue
 - Never skip confirmation: always run the `preview` step, show the owner the parsed message/transaction and risks, and execute only after an explicit "yes".
 - No approvals and no token transfers are needed to claim. If a claim transaction would approve or transfer tokens, stop and ask the owner.
 - Publishing needs exactly one approve for exactly the budget (never unlimited) and one createQuest. Show both to the owner first.
-- Rewards are tiny, funded by each quest's creator, and not guaranteed. Do not describe them as income or returns.
+- Rewards are funded by each quest's creator and not guaranteed. Do not describe them as income or returns.
 - A creator cannot claim their own quest. Never present a quest as official Binance / BNB Chain activity.
 
 ## Reward modes
-- RANDOM: `claim` commits; ~2 blocks later `settle` pays one tier: 0.05 (50%), 0.08 (20%), 0.12 (20%), 0.15 (5%), 0.20 (5%) USDT. Settle within 256 blocks or it pays 0.05.
-- FCFS (first come, first served): `claim` pays a fixed amount in the same transaction to the first claimers, until slots or budget run out.
+- Every reward is at least 0.05 USDT per claimer, with no maximum. Each quest's creator sets the amounts.
+- RANDOM: the creator sets 1-5 tiers (amount + whole-percent chance, total 100%; the site defaults to 30% / 50% / 20%). `claim` commits; ~2 blocks later `settle` pays one tier. Commit-reveal: the voucher carries `serverCommit`, your claim carries `userCommit = keccak256(userSecret)`, and settle reveals both (plus a future block hash), so neither you nor the server can pick the result. Settle within the reveal window (about an hour on BSC) or it pays the lowest tier. See `GET /api/campaigns` → `reward.tiers` for each quest.
+- FCFS (first come, first served): `claim` pays the creator's fixed amount in the same transaction to the first claimers, until slots or budget run out.
 
 ## Flow
 1. Get the owner's wallet: `baw wallet status --json` (BSC address). Check Agent ID: `baw wallet agent-id --json` (must be claimed).
@@ -43,10 +44,14 @@ Old URL https://proofquest-five.vercel.app still works. On-chain names (ProofQue
 3. List quests: `GET /api/campaigns?wallet=<address>` → mode, reward, remainingSlots, targetPostUrl, and `you` (canClaim, reason, pending, claimed).
 4. Complete optional task checklist via `GET /api/tasks/config?campaignId=<id>` and authenticated `GET /api/tasks/progress?campaignId=<id>`. Link an X handle with `POST /api/tasks/progress` `{campaignId, action:"link", handle}`. For each task, open its X intent, then `POST /api/tasks/progress` `{campaignId, action:"start", taskId}`; after 10 seconds submit `{campaignId, action:"verify", taskId}` for follow/like/retweet (self-verified), or include `postUrl` for public post/quote verification. All routes require the signed-in wallet bearer token except task config GET. `verify-quote` refuses to sign until every required task is complete.
 5. The owner quote-posts `targetPostUrl` on X from their own account (their own words). Get the link of that post from the owner.
-6. `POST /api/verify-quote` `{campaignId, postUrl, wallet}` → checks the quote and Agent ID, returns a voucher and `tx` = unsigned calldata plus
+6. `POST /api/verify-quote` `{campaignId, postUrl, wallet, userCommit?}` → checks the quote and Agent ID, returns a voucher and `tx` = unsigned calldata plus
    `tx.agenticWallet.preview` (a `baw contract-call preview ...` command). Voucher is valid 15 minutes and only for this wallet.
+   RANDOM: generate a random 32-byte `userSecret`, keep it, and send `userCommit = keccak256(userSecret)`. If you omit it, the response contains a
+   generated `userSecret` once (keep it; the server does not store it).
 6. Run the preview, show the owner the parsed transaction and risks, wait for "yes", then `baw contract-call execute --requestId <id> --json`.
-7. RANDOM only: poll `GET /api/campaigns?wallet=<address>&id=<campaignId>` until `you.pending.ready`; then send `you.nextTx` (settle) the same way.
+7. RANDOM only: poll `GET /api/campaigns?wallet=<address>&id=<campaignId>&userSecret=<your userSecret>` until `you.pending.ready`; then send `you.nextTx`
+   (`settle(id, userSecret, serverSecret)`) the same way. `you.pending.serverSecret` is revealed only after the target block. After the reveal window
+   `you.nextTx` settles at the lowest tier without secrets.
 
 Testnet note: Agentic Wallet only sends transactions on mainnet. On this testnet deployment, sign-in works with an Agentic Wallet,
 but claim/settle calldata must be sent from a testnet wallet the owner controls.
@@ -55,8 +60,9 @@ but claim/settle calldata must be sent from a testnet wallet the owner controls.
 Creators may attach up to 10 optional X tasks using authenticated `POST /api/tasks/config` after the quest is published. Players link a self-reported X handle, open each task intent, then use `/api/tasks/progress` to verify. Post and quote tasks are checked against X public oEmbed author and post content; follow, like, and retweet are explicitly self-verified after a 10-second delay. Claims are not signed until all configured tasks are complete.
 
 ## Publish your owner's own quest (permissionless; Agent ID holders)
-1. `GET /api/publish` → live rules: minBudget (1 USDT; no maximum budget), max fixed reward per claim (10), random tiers, creatorNeedsAgentId, creationOpen. No platform fee.
-2. `POST /api/publish` `{wallet, title, mode:"FCFS"|"RANDOM", rewardPerClaim (FCFS, e.g. "0.10"), maxClaims, budget (e.g. "1"; min 1, no max), postUrl (X post to quote; optional), durationDays or endTime}`
+1. `GET /api/publish` → live rules: minBudget (0.1 USDT; no maximum budget), minRewardPerClaim (0.05; no maximum), random tier rules, creatorNeedsAgentId, creationOpen. No platform fee.
+2. `POST /api/publish` `{wallet, title, mode:"FCFS"|"RANDOM", rewardPerClaim (FCFS, e.g. "0.10"; min 0.05, no max), tiers (RANDOM, 1-5 items like {"amount":"0.05","chancePct":30}; chances total 100), maxClaims, budget (e.g. "1"; min 0.1 and at least one claim / the largest tier, no max), durationDays or endTime}`
+   `postUrl` (X post to quote) is optional; publish without it and set it later with `POST /api/manage` action `setPost` (claims open once it is set).
    → `steps[]`: (1) `approve(QuestRewards, budget)` on the reward token, exact amount; (2) `createQuest(...)`, which creates and funds in one tx.
    Send each step in order with `baw contract-call preview` → show owner → `execute` after "yes". `warnings[]` lists e.g. low wallet balance.
 3. `GET /api/campaigns?creator=<wallet>` → the new quest (id, creator, budget, slots). To configure optional X tasks, sign in and `POST /api/tasks/config` `{campaignId, wallet, tasks:[{type:"follow|like|retweet|quote|post", target:"@handle or X post URL", requiredText:"optional|required for post/quote"}]}`. Only the on-chain creator can save up to 10 validated tasks; task definitions are private Blob records.

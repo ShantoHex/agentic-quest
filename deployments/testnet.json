@@ -124,9 +124,9 @@
       "supersededBy": "0x0c14AA36e477A885881c2084769CaF6E1AB40E9a",
       "note": "v3 owner-only campaigns; replaced by permissionless v4. Still holds its 25 test USDT."
     },
-    "QuestRewards": {
+    "QuestRewards_v4_superseded": {
       "address": "0x0c14AA36e477A885881c2084769CaF6E1AB40E9a",
-      "version": "v4-permissionless (createQuest by Agent ID holders; creator-owned funds)",
+      "version": "v4-permissionless (createQuest by Agent ID holders; creator-owned funds) \u2014 superseded by v5 on 2026-11-21 (still holds its quests; creators can withdraw leftovers)",
       "deployTx": "0xeee326b992a6121dcc9ffc09cce5f62aecf02cfd701bbd14a20830ae5b8dde0d",
       "constructor": {
         "agentId": "0xD126FBafc7e7a609056e421187A0286FFC27e5c5",
@@ -212,6 +212,38 @@
       "abi": "abi/QuestRewards.json",
       "sourcify": "https://repo.sourcify.dev/97/0x0c14AA36e477A885881c2084769CaF6E1AB40E9a",
       "verification": "match (creation + runtime)"
+    },
+    "QuestRewards": {
+      "address": "0x0D812bad0A7804a24CeB5bEccf84E2f6916c866D",
+      "version": "v5-tiers (per-claim min 0.05 no max; RANDOM creator tiers 1-5 with commit-reveal; min budget 0.1)",
+      "deployTx": "0xf7ff725ba7fcdd46d2eebf0cbd4a88ef16a2b7fd40efd4e6232ad7c04a15a471",
+      "deployGasUsed": 4059284,
+      "constructor": {
+        "agentId": "0xD126FBafc7e7a609056e421187A0286FFC27e5c5",
+        "token": "0x6898e0e131FDB06b9Ae8d4C3f4475438F04c3398",
+        "owner": "0x50EF873dBfAB2A5716FbaDAAA03712fFC7d0797e"
+      },
+      "signer": "0x3d6a6B965c815447F2763D50477400dc01DE2098",
+      "setSignerTx": "0x6f5c41d808237abbe1fbb4131ebfacdd2d795ccc402f747cd44952aab0e89de2",
+      "creationConfig": {
+        "creationOpen": true,
+        "creatorNeedsAgentId": true,
+        "minBudget": "0.1 USDT (constructor default; owner-settable via setCreationConfig)",
+        "minReward": "0.05 USDT per claimer (immutable), no maximum",
+        "randomTiers": "1-5, chances sum to 100, default 30/50/20",
+        "fee": "0"
+      },
+      "eip712": {
+        "name": "ProofQuest QuestRewards",
+        "version": "2",
+        "chainId": 97,
+        "verifyingContract": "0x0D812bad0A7804a24CeB5bEccf84E2f6916c866D",
+        "voucherType": "Voucher(uint256 campaignId,bytes32 handleHash,address user,bytes32 xPostIdHash,bytes32 xAccountIdHash,bytes32 serverCommit,uint256 deadline)"
+      },
+      "abi": "abi/QuestRewards.json",
+      "sourcify": "https://repo.sourcify.dev/97/0x0D812bad0A7804a24CeB5bEccf84E2f6916c866D",
+      "verification": "exact match (creation + runtime), job 383947e0-10ed-4811-92b2-62bc71b850ce",
+      "e2e": {}
     }
   },
   "actions": {

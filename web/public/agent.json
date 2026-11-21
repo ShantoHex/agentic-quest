@@ -16,8 +16,8 @@
   },
   "contracts": {
     "QuestRewards": {
-      "address": "0x0c14AA36e477A885881c2084769CaF6E1AB40E9a",
-      "source": "https://repo.sourcify.dev/97/0x0c14AA36e477A885881c2084769CaF6E1AB40E9a",
+      "address": "0x0D812bad0A7804a24CeB5bEccf84E2f6916c866D",
+      "source": "https://repo.sourcify.dev/97/0x0D812bad0A7804a24CeB5bEccf84E2f6916c866D",
       "abi": "https://agentic-quest.vercel.app/abi/QuestRewards.json"
     },
     "AgentIdRegistry": {
@@ -30,43 +30,25 @@
     "Never request, store or transmit seed phrases, private keys, API secrets or pairing codes.",
     "Always preview, show the owner the parsed message/transaction and risks, and execute only after explicit owner confirmation.",
     "Claiming needs no approvals or token transfers. Publishing needs one approve for EXACTLY the budget (never unlimited) plus createQuest.",
-    "Rewards are small, creator-funded and not guaranteed; never present them as income or returns, or as official Binance/BNB Chain activity.",
+    "Rewards are creator-funded (min 0.05 USDT per claimer, no max) and not guaranteed; never present them as income or returns, or as official Binance/BNB Chain activity.",
     "A creator cannot claim their own quest."
   ],
   "rewardModes": {
+    "minRewardPerClaim": "0.05 (both modes, enforced on-chain); no maximum",
     "RANDOM": {
       "steps": [
-        "claim (commit)",
+        "verify-quote with userCommit = keccak256(userSecret) (keep userSecret)",
+        "claim (commit; reserves the largest tier)",
         "wait 2 blocks",
-        "settle"
+        "settle(id, userSecret, serverSecret) from listCampaigns(&userSecret=) you.nextTx"
       ],
-      "tiers": [
-        [
-          "0.05",
-          50
-        ],
-        [
-          "0.08",
-          20
-        ],
-        [
-          "0.12",
-          20
-        ],
-        [
-          "0.15",
-          5
-        ],
-        [
-          "0.20",
-          5
-        ]
-      ],
-      "expiry": "settle within 256 blocks or it pays 0.05"
+      "tiers": "set by the creator: 1-5 amounts (each >= 0.05, no max) with whole-percent chances totalling 100; site default 30/50/20. Per quest: listCampaigns -> reward.tiers",
+      "randomness": "commit-reveal: server secret (committed in the voucher) + claimant secret (committed in claim) + future block hash; neither side can pick the result alone",
+      "expiry": "settle within the reveal window (target block hash readable: 256 blocks, ~8191 with EIP-2935 on BSC) or it pays the lowest tier"
     },
     "FCFS": {
       "steps": [
-        "claim (pays fixed amount immediately)"
+        "claim (pays the creator's fixed amount immediately)"
       ],
       "limit": "first maxClaims claimers, while campaign budget lasts"
     }
@@ -145,7 +127,7 @@
     {
       "name": "listCampaigns",
       "method": "GET",
-      "url": "https://agentic-quest.vercel.app/api/campaigns?wallet={address}&id={optional}&creator={optional}",
+      "url": "https://agentic-quest.vercel.app/api/campaigns?wallet={address}&id={optional}&creator={optional}&userSecret={RANDOM settle: your userSecret}",
       "auth": "optional"
     },
     {
@@ -155,16 +137,17 @@
       "body": {
         "campaignId": "1",
         "postUrl": "https://x.com/<user>/status/<id>",
-        "wallet": "0x…"
+        "wallet": "0x…",
+        "userCommit": "RANDOM: keccak256(userSecret), optional (else a userSecret is generated and returned once)"
       },
       "auth": "optional Bearer token (must match wallet)",
-      "returns": "voucher + tx {to,data,value,agenticWallet.preview}"
+      "returns": "voucher {serverCommit,userCommit,...} + tx {to,data,value,agenticWallet.preview}"
     },
     {
       "name": "publishRules",
       "method": "GET",
       "url": "https://agentic-quest.vercel.app/api/publish",
-      "returns": "minBudget (1 USDT), maxBudget none, maxFcfsRewardPerClaim, creatorNeedsAgentId, creationOpen, platformFee 0"
+      "returns": "minBudget (0.1 USDT), maxBudget none, minRewardPerClaim (0.05), maxRewardPerClaim none, randomTiers rules, creatorNeedsAgentId, creationOpen, platformFee 0"
     },
     {
       "name": "publishQuest",
@@ -174,10 +157,24 @@
         "wallet": "0x…",
         "title": "Quote our launch post",
         "mode": "FCFS|RANDOM",
-        "rewardPerClaim": "0.10 (FCFS only)",
+        "rewardPerClaim": "0.10 (FCFS only; min 0.05, no max)",
+        "tiers": [
+          {
+            "amount": "0.05",
+            "chancePct": 30
+          },
+          {
+            "amount": "0.10",
+            "chancePct": 50
+          },
+          {
+            "amount": "0.50",
+            "chancePct": 20
+          }
+        ],
         "maxClaims": 50,
-        "budget": "1",
-        "postUrl": "https://x.com/<you>/status/<id> (optional)",
+        "budget": "1 (min 0.1 and >= one claim / largest tier)",
+        "postUrl": "optional; set later via manageQuest setPost",
         "durationDays": 7
       },
       "auth": "optional Bearer token (must match wallet)",
@@ -237,17 +234,17 @@
     }
   ],
   "transactions": {
-    "claim": "claim(uint256 id, bytes32 xPostIdHash, bytes32 xAccountIdHash, uint256 deadline, bytes signature) — calldata returned by verifyQuote",
-    "settle": "settle(uint256 id) — RANDOM only; calldata returned as you.nextTx by listCampaigns when ready",
+    "claim": "claim(uint256 id, bytes32 xPostIdHash, bytes32 xAccountIdHash, bytes32 serverCommit, bytes32 userCommit, uint256 deadline, bytes signature) — calldata returned by verifyQuote (commits are 0 for FCFS)",
+    "settle": "settle(uint256 id, bytes32 userSecret, bytes32 serverSecret) — RANDOM only; calldata returned as you.nextTx by listCampaigns(&userSecret=) once the target block is mined; settleExpired(id, user) (anyone) after the reveal window pays the lowest tier",
     "send": [
       "baw contract-call preview --binanceChainId 56 --from <wallet> --to <contract> --value 0 --inputData <data> --json",
       "show parsed tx + risks, wait for owner 'yes'",
       "baw contract-call execute --requestId <id> --json"
     ],
-    "createQuest": "createQuest(uint8 mode, uint256 fcfsAmount, uint32 maxClaims, uint64 endTime, string targetPostId, string title, uint256 budget) — creates + funds; preceded by an exact approve",
-    "creator": "setCampaignPaused(id,bool), setTargetPost(id,string) before first claim, withdrawCampaignLeftover(id,amount,to) after end or while paused"
+    "createQuest": "createQuest(uint8 mode, uint256 fcfsAmount, uint256[] tierAmounts, uint8[] tierChances, uint32 maxClaims, uint64 endTime, string targetPostId, string title, uint256 budget) — creates + funds; preceded by an exact approve",
+    "creator": "setCampaignPaused(id,bool), setTargetPost(id,string) any time before the first claim (quests may start without a post), withdrawCampaignLeftover(id,amount,to) after end or while paused"
   },
-  "note": "Contract names (ProofQuest, QuestRewards) and EIP-712 voucher domains ('ProofQuest RewardDrop', 'ProofQuest QuestRewards' v1) keep their original names on purpose. Login message domain: 'Agentic Quest'.",
+  "note": "Contract names (ProofQuest, QuestRewards) and EIP-712 voucher domain names ('ProofQuest RewardDrop' v1, 'ProofQuest QuestRewards' v2) keep their original names on purpose. Login message domain: 'Agentic Quest'.",
   "aliases": [
     "https://proofquest-five.vercel.app"
   ],

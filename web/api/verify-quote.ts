@@ -9,8 +9,9 @@
 //   BLOB_READ_WRITE_TOKEN  set by the linked Vercel Blob store (submission log)
 import { put } from "@vercel/blob";
 import { readProgress, readTasks } from "./_tasks.js";
+import { randomBytes } from "node:crypto";
 import { getAddress, isAddress, keccak256, toBytes, type Address, type Hex } from "viem";
-import { CHAIN_ID, client, DEPLOYED, encodeClaim, IS_MAINNET, qrAbi, QUEST_REWARDS, readSession, REGISTRY, REWARD_DROP, signerAccount, txFor } from "./_lib.js";
+import { CHAIN_ID, client, DEPLOYED, encodeClaim, IS_MAINNET, isBytes32, qrAbi, QUEST_REWARDS, readSession, REGISTRY, REWARD_DROP, serverSecretFor, signerAccount, txFor, VOUCHER_DOMAIN_NAME, VOUCHER_DOMAIN_VERSION, ZERO32 } from "./_lib.js";
 
 const VOUCHER_TTL_SEC = 15 * 60;
 
@@ -79,7 +80,8 @@ export default async function handler(req: any, res: any) {
   return legacy(req, res);
 }
 
-/** QuestRewards (v3): one voucher per campaign. The X post to quote is read from the campaign on-chain. */
+/** QuestRewards: one voucher per campaign. The X post to quote is read from the campaign on-chain.
+ *  RANDOM vouchers also carry serverCommit = keccak256(server secret) for the commit-reveal draw. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function campaignVoucher(req: any, res: any, body: any) {
   if (!DEPLOYED) return send(res, 503, { ok: false, code: "NOT_DEPLOYED", error: "Quests are not live on this network yet." });
@@ -130,9 +132,24 @@ async function campaignVoucher(req: any, res: any, body: any) {
     if (postUsed) return send(res, 409, { ok: false, code: "POST_USED", error: "This post was already used for a claim." });
     if (accountUsed) return send(res, 409, { ok: false, code: "ACCOUNT_USED", error: "This X account was already used in this campaign." });
 
+    const mode = camp.mode === 1 ? "FCFS" : "RANDOM";
+    // RANDOM commit-reveal: the server commits to its secret now (signed), the claimant commits to theirs in the
+    // claim tx. Best practice: the claimant sends its own userCommit = keccak256(userSecret) and keeps userSecret.
+    // If none is sent, one is generated here and returned once (then this server could know it; see README).
+    let serverCommit: Hex = ZERO32, userCommit: Hex = ZERO32, generatedUserSecret: Hex | null = null;
+    if (mode === "RANDOM") {
+      serverCommit = keccak256(serverSecretFor(id, user, handleHash));
+      if (body?.userCommit !== undefined && body?.userCommit !== null && body?.userCommit !== "") {
+        if (!isBytes32(body.userCommit)) return send(res, 400, { ok: false, code: "BAD_COMMIT", error: "userCommit must be keccak256(userSecret) as 0x + 64 hex (not zero)." });
+        userCommit = body.userCommit as Hex;
+      } else {
+        generatedUserSecret = `0x${randomBytes(32).toString("hex")}` as Hex;
+        userCommit = keccak256(generatedUserSecret);
+      }
+    }
     const deadline = BigInt(Math.floor(Date.now() / 1000) + VOUCHER_TTL_SEC);
     const signature = await signer.signTypedData({
-      domain: { name: "ProofQuest QuestRewards", version: "1", chainId: CHAIN_ID, verifyingContract: QUEST_REWARDS },
+      domain: { name: VOUCHER_DOMAIN_NAME, version: VOUCHER_DOMAIN_VERSION, chainId: CHAIN_ID, verifyingContract: QUEST_REWARDS },
       types: {
         Voucher: [
           { name: "campaignId", type: "uint256" },
@@ -140,11 +157,12 @@ async function campaignVoucher(req: any, res: any, body: any) {
           { name: "user", type: "address" },
           { name: "xPostIdHash", type: "bytes32" },
           { name: "xAccountIdHash", type: "bytes32" },
+          { name: "serverCommit", type: "bytes32" },
           { name: "deadline", type: "uint256" },
         ],
       },
       primaryType: "Voucher",
-      message: { campaignId: id, handleHash, user, xPostIdHash, xAccountIdHash, deadline },
+      message: { campaignId: id, handleHash, user, xPostIdHash, xAccountIdHash, serverCommit, deadline },
     });
     if (process.env.BLOB_READ_WRITE_TOKEN) {
       const record = { campaignId: id.toString(), handle, xUsername: post.username, xUserId: post.authorId, postId: post.id, wallet: user, quotedPostId: post.quotedId, postCreatedAt: post.createdAt, verifiedAt: new Date().toISOString(), chainId: CHAIN_ID, contract: QUEST_REWARDS, via: sess ? "agent-session" : "anonymous" };
@@ -152,13 +170,13 @@ async function campaignVoucher(req: any, res: any, body: any) {
         access: "private", contentType: "application/json", addRandomSuffix: false, allowOverwrite: true,
       }).catch((e) => console.error("blob log failed:", e instanceof Error ? e.message : "unknown"));
     }
-    const mode = camp.mode === 1 ? "FCFS" : "RANDOM";
     return send(res, 200, {
       ok: true, campaignId: id.toString(), mode, handle, username: post.username, xUserId: post.authorId, postId: post.id,
-      voucher: { campaignId: id.toString(), xPostIdHash, xAccountIdHash, deadline: deadline.toString(), signature },
-      tx: txFor(user, encodeClaim(id, xPostIdHash, xAccountIdHash, deadline, signature), mode === "FCFS" ? `Claim FCFS reward (campaign ${id})` : `Commit RANDOM claim (campaign ${id}); settle after 2 blocks`),
+      voucher: { campaignId: id.toString(), xPostIdHash, xAccountIdHash, serverCommit, userCommit, deadline: deadline.toString(), signature },
+      tx: txFor(user, encodeClaim(id, xPostIdHash, xAccountIdHash, serverCommit, userCommit, deadline, signature), mode === "FCFS" ? `Claim FCFS reward (campaign ${id})` : `Commit RANDOM claim (campaign ${id}); settle after 2 blocks`),
+      ...(generatedUserSecret ? { userSecret: generatedUserSecret, userSecretNote: "KEEP THIS: needed to settle. It is not stored on the server. Lost secret = lowest tier after the reveal window." } : {}),
       expiresAt: Number(deadline),
-      next: mode === "RANDOM" ? "After the claim tx is mined, wait ~3 blocks, then GET /api/campaigns?wallet=<you>&id=<id> and send you.nextTx (settle)." : "FCFS pays in the same transaction.",
+      next: mode === "RANDOM" ? "After the claim tx is mined, wait ~3 blocks, then GET /api/campaigns?wallet=<you>&id=<id>&userSecret=<your userSecret> and send you.nextTx (settle reveals both secrets)." : "FCFS pays in the same transaction.",
     });
   } catch (e) {
     console.error("campaign voucher error:", e instanceof Error ? e.message : "unknown");

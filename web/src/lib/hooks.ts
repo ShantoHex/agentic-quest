@@ -36,7 +36,7 @@ export type Tx = { label: string; from: Address; to: Address; data: Hex; value: 
 export type You = { canClaim: boolean; reason: string | null; claimed: boolean; reward: string | null; pending?: { targetBlock: string; ready: boolean; expired: boolean; blocksLeft: number }; nextTx?: Tx };
 export type Camp = {
   id: string; title: string; mode: "RANDOM" | "FCFS"; creator: Address; blocked: boolean;
-  reward: { type: "fixed"; amount: string } | { type: "random"; tiers: { amount: string; oddsPct: number }[] };
+  reward: { type: "fixed"; amount: string } | { type: "random"; tiers: { amount: string; oddsPct: number }[]; reservedPerClaim?: string };
   maxClaims: number; slotsUsed: number; settled: number; remainingSlots: string; endTime: number | null; paused: boolean;
   budget: { balance: string; reserved: string; totalPaid: string }; targetPostId: string | null; targetPostUrl: string | null; you?: You;
 };

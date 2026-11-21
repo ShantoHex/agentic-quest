@@ -7,25 +7,27 @@ import {SafeERC20} from "./libraries/SafeERC20.sol";
 import {Ownable2Step} from "./utils/Ownable2Step.sol";
 import {ReentrancyGuard} from "./utils/ReentrancyGuard.sol";
 
-/// @title QuestRewards
+/// @title QuestRewards (v5: creator-set rewards and reward tiers)
 /// @notice Reward campaigns ("quests") for Agent ID holders, paid in one ERC-20
 ///         (USDT on BSC). Each campaign has its own budget and one of two modes:
 ///
-///         - RANDOM: two-step claim (commit, then settle after a future block).
-///           Tiers 0.05 (50%), 0.08 (20%), 0.12 (20%), 0.15 (5%), 0.20 (5%) whole
-///           tokens. The max tier is reserved at commit so payouts are covered.
-///         - FCFS (first come, first served): a fixed `fcfsAmount` paid in ONE
-///           transaction to each of the first `maxClaims` valid claimers, until the
-///           slots or the campaign budget run out.
+///         - FCFS (first come, first served): the creator sets a fixed `fcfsAmount`
+///           (>= MIN_REWARD = 0.05 token, NO maximum), paid in ONE transaction to each
+///           of the first `maxClaims` valid claimers, until slots or budget run out.
+///         - RANDOM: the creator defines 1 to 5 reward tiers (amount >= 0.05 token each,
+///           NO maximum) with whole-percent chances that sum to 100 (the site defaults to
+///           3 tiers at 30% / 50% / 20%). Two-step claim: commit, then settle after a
+///           future block. The LARGEST tier is reserved at commit, so the contract can
+///           never owe more than a quest holds.
 ///
 ///         PERMISSIONLESS: anyone (by default only Agent ID holders) can publish a
 ///         quest with {createQuest}, funding it in the same transaction (min budget,
-///         default 1 token; no maximum). Each quest's funds are isolated and belong to its creator: only
-///         the creator can withdraw the unreserved leftover (after the end, or while
-///         the quest is paused/blocked). The platform owner can NOT withdraw quest
-///         funds. Rewards are funded by quest creators. There is no yield, no
-///         promised return, and nothing is guaranteed: when a quest's slots or budget
-///         are used up, claims stop. No platform fee.
+///         default 0.1 token, and at least one claim's worth; no maximum). Each quest's
+///         funds are isolated and belong to its creator: only the creator can withdraw
+///         the unreserved leftover (after the end, or while the quest is paused/blocked).
+///         The platform owner can NOT withdraw quest funds. Rewards are funded by quest
+///         creators. There is no yield, no promised return, and nothing is guaranteed:
+///         when a quest's slots or budget are used up, claims stop. No platform fee.
 ///
 /// @dev Gating (both modes):
 ///      - Caller must hold an Agent ID (registry `balanceOf > 0`, non-empty `handleOf`).
@@ -33,21 +35,36 @@ import {ReentrancyGuard} from "./utils/ReentrancyGuard.sol";
 ///        and one claim per address per campaign.
 ///      - The project server checks that the caller's X post quotes the campaign's
 ///        `targetPostId` and signs an EIP-712 `Voucher` bound to campaignId, handle
-///        hash and caller. Each X post can be used once in total; each X account
-///        once per campaign.
+///        hash, caller and (RANDOM) a server-secret commitment. Each X post can be used
+///        once in total; each X account once per campaign.
 ///
-///      RANDOMNESS LIMITS (RANDOM mode): `blockhash(targetBlock)` is unknown when the
-///      commit is sent, but the validator producing `targetBlock` could bias it. This
-///      is acceptable only because rewards are tiny (max 0.20). If a commit is not
-///      settled within 256 blocks after `targetBlock`, it settles at the LOWEST tier
-///      (no re-roll). Mainnet upgrade path for anything of value: Chainlink VRF.
+///      RANDOMNESS (RANDOM mode), commit-reveal with three independent inputs:
+///        1. `serverCommit = keccak256(serverSecret)`: signed into the voucher BEFORE the
+///           claim, so the server is bound to its secret without knowing the claimant's.
+///        2. `userCommit = keccak256(userSecret)`: chosen by the claimant in {claim},
+///           without knowing `serverSecret`.
+///        3. `blockhash(targetBlock)`, a block mined AFTER both commits are fixed.
+///      {settle} reveals both secrets; seed = keccak256(blockhash, userSecret,
+///      serverSecret, campaign, claimant, ...). Nobody can pick the outcome alone:
+///      the claimant does not know `serverSecret` when committing, the server does not
+///      know `userSecret`, and neither knows the future block hash. Biasing it needs
+///      the claimant AND the server AND the validator of `targetBlock` to collude.
+///      Withholding a reveal never helps: if a commit is not settled with valid reveals
+///      while the target block hash is still readable (256 blocks via BLOCKHASH, or
+///      ~8191 via the EIP-2935 history contract when the chain has it), it settles at
+///      the LOWEST tier (no re-roll, no retry). The server can therefore delay or grief a
+///      claimant down to the lowest tier, but can not raise anyone's reward.
+///      A compromised signer key can let extra Agent ID holders claim once each, but
+///      still can not choose RANDOM outcomes without the block producer.
 ///
 ///      Creator permissions (only over their OWN quest):
 ///      - `setCampaignPaused`: pause / resume new claims on the quest.
-///      - `setTargetPost`: set the X post to quote, ONLY before the quest's first claim.
+///      - `setTargetPost`: set the X post to quote, ONLY before the quest's first claim
+///        (a quest can be published without a post and get one later).
 ///      - `withdrawCampaignLeftover`: withdraw the quest's funds NOT reserved for pending
 ///        RANDOM claims, only after `endTime`, or while the quest is paused or blocked,
 ///        or while the platform is globally paused.
+///      Rewards, tiers, slots and end time of a quest are fixed at creation.
 ///
 ///      Platform owner permissions (the ONLY admin surface, all disclosed):
 ///      - `pause` / `unpause`: stop or resume NEW claims on all quests (creators can
@@ -61,8 +78,9 @@ import {ReentrancyGuard} from "./utils/ReentrancyGuard.sol";
 ///      - `withdrawUnallocated`: withdraw tokens sent directly to the contract that
 ///        were never credited to any quest (never quest funds).
 ///      - `transferOwnership` / `acceptOwnership` / `renounceOwnership`.
-///      The owner CANNOT withdraw or move any quest's funds. No upgrade proxy, no mint,
-///      no fee, and reserved funds can never be withdrawn.
+///      The owner CANNOT withdraw or move any quest's funds, change an existing quest's
+///      rewards, slots or budget, or reverse claims. No upgrade proxy, no mint, no fee,
+///      and reserved funds can never be withdrawn.
 contract QuestRewards is Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -73,16 +91,20 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
 
     uint64 public constant SETTLE_DELAY = 2;
     uint64 public constant BLOCKHASH_WINDOW = 256;
+    /// @notice EIP-2935 block-hash history contract (serves the last 8191 hashes where deployed).
+    address public constant HISTORY_STORAGE = 0x0000F90827F1C53a10cb7A02335B175320002935;
+    uint64 public constant HISTORY_WINDOW = 8191;
     uint32 public constant MAX_CLAIMS_LIMIT = 1_000_000;
+    uint256 public constant MAX_TIERS = 5;
 
     bytes32 public constant VOUCHER_TYPEHASH = keccak256(
-        "Voucher(uint256 campaignId,bytes32 handleHash,address user,bytes32 xPostIdHash,bytes32 xAccountIdHash,uint256 deadline)"
+        "Voucher(uint256 campaignId,bytes32 handleHash,address user,bytes32 xPostIdHash,bytes32 xAccountIdHash,bytes32 serverCommit,uint256 deadline)"
     );
     bytes32 private constant _DOMAIN_TYPEHASH = keccak256(
         "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
     );
     string public constant EIP712_NAME = "ProofQuest QuestRewards";
-    string public constant EIP712_VERSION = "1";
+    string public constant EIP712_VERSION = "2";
     bytes32 private constant _HASHED_NAME = keccak256(bytes(EIP712_NAME));
     bytes32 private constant _HASHED_VERSION = keccak256(bytes(EIP712_VERSION));
     uint256 private constant _HALF_N =
@@ -95,13 +117,8 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
     IERC20 public immutable token;
     uint8 public immutable tokenDecimals;
 
-    uint256 public immutable tier0; // 0.05 (50%)
-    uint256 public immutable tier1; // 0.08 (20%)
-    uint256 public immutable tier2; // 0.12 (20%)
-    uint256 public immutable tier3; // 0.15 (5%)
-    uint256 public immutable tier4; // 0.20 (5%) = max, reserved on commit
-    /// @notice Hard cap on a FCFS per-claim amount: 10 whole tokens. Limits damage from owner mistakes or a leaked signer.
-    uint256 public immutable maxFcfsAmount;
+    /// @notice Minimum reward per claimer, both modes: 0.05 whole tokens. There is no maximum.
+    uint256 public immutable minReward;
 
     struct Campaign {
         Mode mode;
@@ -112,7 +129,7 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         uint64 endTime; // 0 = no end
         uint256 fcfsAmount; // FCFS only, 0 for RANDOM
         uint256 balance; // credited funds minus payouts and withdrawals
-        uint256 reserved; // RANDOM: tier4 per pending commit
+        uint256 reserved; // RANDOM: max tier per pending commit
         uint256 totalPaid;
         string targetPostId; // decimal X post ID that claimers must quote ("" = not set yet)
         string title;
@@ -121,6 +138,8 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
     struct Pending {
         uint64 targetBlock; // 0 = none
         bytes32 handleHash;
+        bytes32 userCommit;
+        bytes32 serverCommit;
         string handle;
     }
 
@@ -138,10 +157,16 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
     bool public creationOpen = true;
     /// @notice Whether a quest creator must hold an Agent ID (owner is exempt).
     bool public creatorNeedsAgentId = true;
-    /// @notice Minimum initial budget for a new quest (token units). Default 5 tokens.
+    /// @notice Minimum initial budget for a new quest (token units). Default 0.1 token.
     uint256 public minBudget;
 
     mapping(uint256 => Campaign) private _campaigns;
+    mapping(uint256 => uint256[]) private _tierAmounts; // RANDOM only
+    mapping(uint256 => uint8[]) private _tierChances; // RANDOM only, whole percent, sum 100
+    /// @notice Per-claim amount a quest reserves / needs: fcfsAmount (FCFS) or the max tier (RANDOM).
+    mapping(uint256 => uint256) public rewardUnit;
+    /// @notice Smallest payout of a quest (FCFS amount, or the lowest RANDOM tier).
+    mapping(uint256 => uint256) public lowestReward;
     mapping(uint256 => mapping(address => Pending)) private _pending;
     mapping(uint256 => mapping(bytes32 => address)) public handlePendingBy;
     mapping(uint256 => mapping(bytes32 => bool)) public handleClaimed;
@@ -159,6 +184,7 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         string targetPostId,
         string title
     );
+    event TiersSet(uint256 indexed id, uint256[] amounts, uint8[] chancesPct);
     event QuestCreated(uint256 indexed id, address indexed creator, uint256 budget);
     event QuestBlocked(uint256 indexed id, bool blocked);
     event CreationConfigUpdated(bool open, bool needsAgentId, uint256 minBudget);
@@ -173,6 +199,9 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         uint64 targetBlock,
         bytes32 xPostIdHash,
         bytes32 xAccountIdHash
+    );
+    event RandomCommitted(
+        uint256 indexed id, address indexed user, bytes32 userCommit, bytes32 serverCommit
     );
     event Claimed(
         uint256 indexed id,
@@ -198,12 +227,17 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
     error UnknownCampaign();
     error CampaignEnded();
     error BadParams();
+    error BadTiers();
+    error RewardTooLow();
     error NoAgentId();
     error HandleAlreadyClaimed();
     error AddressAlreadyClaimed();
     error ClaimPending();
     error NoPendingClaim();
     error TooEarly();
+    error NotExpired();
+    error BadReveal();
+    error MissingCommit();
     error NoSlotsLeft();
     error PoolInsufficient();
     error AmountTooHigh();
@@ -233,13 +267,8 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         tokenDecimals = uint8(dec);
 
         uint256 cent = 10 ** (dec - 2);
-        tier0 = 5 * cent;
-        tier1 = 8 * cent;
-        tier2 = 12 * cent;
-        tier3 = 15 * cent;
-        tier4 = 20 * cent;
-        maxFcfsAmount = 1000 * cent;
-        minBudget = 100 * cent; // 1 token (no maximum budget)
+        minReward = 5 * cent; // 0.05 token per claimer, no maximum
+        minBudget = 10 * cent; // 0.1 token (no maximum budget)
 
         _cachedChainId = block.chainid;
         _cachedDomainSeparator = _buildDomainSeparator();
@@ -247,13 +276,17 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
 
     // ------------------------------------------------------------------ user
 
-    /// @notice Claim in campaign `id`. FCFS pays `fcfsAmount` now. RANDOM records a
-    ///         commit; call {settle} after `targetBlock` to receive the random tier.
+    /// @notice Claim in campaign `id`. FCFS pays `fcfsAmount` now (commits are ignored, pass 0).
+    ///         RANDOM records a commit; call {settle} after `targetBlock` with both reveals.
+    /// @param serverCommit keccak256(serverSecret), signed in the voucher (0 for FCFS).
+    /// @param userCommit keccak256(userSecret), the claimant's own secret (0 for FCFS).
     /// @return paid Amount paid now (0 for a RANDOM commit).
     function claim(
         uint256 id,
         bytes32 xPostIdHash,
         bytes32 xAccountIdHash,
+        bytes32 serverCommit,
+        bytes32 userCommit,
         uint256 deadline,
         bytes calldata signature
     ) external nonReentrant returns (uint256 paid) {
@@ -277,65 +310,89 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         if (usedAccount[id][xAccountIdHash]) revert AccountAlreadyUsed();
         if (c.slotsUsed >= c.maxClaims) revert NoSlotsLeft();
 
-        bytes32 digest = voucherDigest(id, h, msg.sender, xPostIdHash, xAccountIdHash, deadline);
+        bytes32 digest =
+            voucherDigest(id, h, msg.sender, xPostIdHash, xAccountIdHash, serverCommit, deadline);
         if (_recover(digest, signature) != signer_) revert InvalidSignature();
 
         usedPost[xPostIdHash] = true;
         usedAccount[id][xAccountIdHash] = true;
         c.slotsUsed += 1;
 
+        uint256 unit = rewardUnit[id];
+        if (c.balance - c.reserved < unit) revert PoolInsufficient();
+
         if (c.mode == Mode.FCFS) {
-            uint256 amt = c.fcfsAmount;
-            if (c.balance - c.reserved < amt) revert PoolInsufficient();
             handleClaimed[id][h] = true;
             addressClaimed[id][msg.sender] = true;
-            rewardOfHandle[id][h] = amt;
-            c.balance -= amt;
-            c.totalPaid += amt;
+            rewardOfHandle[id][h] = unit;
+            c.balance -= unit;
+            c.totalPaid += unit;
             c.settled += 1;
-            totalCampaignBalance -= amt;
-            token.safeTransfer(msg.sender, amt);
-            emit Claimed(id, h, handle, msg.sender, amt, Mode.FCFS);
-            return amt;
+            totalCampaignBalance -= unit;
+            token.safeTransfer(msg.sender, unit);
+            emit Claimed(id, h, handle, msg.sender, unit, Mode.FCFS);
+            return unit;
         }
 
-        if (c.balance - c.reserved < tier4) revert PoolInsufficient();
+        if (serverCommit == bytes32(0) || userCommit == bytes32(0)) revert MissingCommit();
         uint64 target = uint64(block.number) + SETTLE_DELAY;
-        c.reserved += tier4;
+        c.reserved += unit;
         handlePendingBy[id][h] = msg.sender;
-        _pending[id][msg.sender] = Pending({targetBlock: target, handleHash: h, handle: handle});
+        _pending[id][msg.sender] = Pending({
+            targetBlock: target,
+            handleHash: h,
+            userCommit: userCommit,
+            serverCommit: serverCommit,
+            handle: handle
+        });
         emit ClaimCommitted(id, h, handle, msg.sender, target, xPostIdHash, xAccountIdHash);
+        emit RandomCommitted(id, msg.sender, userCommit, serverCommit);
         return 0;
     }
 
-    /// @notice RANDOM step 2: settle once `targetBlock` is mined. Pays msg.sender.
-    function settle(uint256 id) external nonReentrant returns (uint256 amount) {
-        Campaign storage c = _campaign(id);
+    /// @notice RANDOM step 2: once `targetBlock` is mined, reveal both secrets to receive the
+    ///         random tier. Pays msg.sender. If the target block hash is no longer readable,
+    ///         pays the lowest tier (reveals are then ignored).
+    function settle(uint256 id, bytes32 userSecret, bytes32 serverSecret)
+        external
+        nonReentrant
+        returns (uint256 amount)
+    {
+        _campaign(id);
         Pending memory p = _pending[id][msg.sender];
         if (p.targetBlock == 0) revert NoPendingClaim();
         if (block.number <= p.targetBlock) revert TooEarly();
 
-        bytes32 bh = blockhash(p.targetBlock);
+        bytes32 bh = _blockHash(p.targetBlock);
         if (bh == bytes32(0)) {
-            amount = tier0;
+            amount = lowestReward[id];
             emit ClaimExpiredFallback(id, p.handleHash, msg.sender);
         } else {
-            amount = tierFor(randomSeed(id, bh, msg.sender, p.handleHash));
+            if (
+                keccak256(abi.encodePacked(userSecret)) != p.userCommit
+                    || keccak256(abi.encodePacked(serverSecret)) != p.serverCommit
+            ) revert BadReveal();
+            amount =
+                tierFor(id, randomSeed(id, bh, msg.sender, p.handleHash, userSecret, serverSecret));
         }
+        _finish(id, msg.sender, p, amount);
+    }
 
-        delete _pending[id][msg.sender];
-        delete handlePendingBy[id][p.handleHash];
-        handleClaimed[id][p.handleHash] = true;
-        addressClaimed[id][msg.sender] = true;
-        rewardOfHandle[id][p.handleHash] = amount;
-        c.reserved -= tier4;
-        c.balance -= amount;
-        c.totalPaid += amount;
-        c.settled += 1;
-        totalCampaignBalance -= amount;
-
-        token.safeTransfer(msg.sender, amount);
-        emit Claimed(id, p.handleHash, p.handle, msg.sender, amount, Mode.RANDOM);
+    /// @notice Anyone may finalize a RANDOM commit whose target block hash is no longer
+    ///         readable: pays `user` the lowest tier and releases the reservation.
+    function settleExpired(uint256 id, address user)
+        external
+        nonReentrant
+        returns (uint256 amount)
+    {
+        _campaign(id);
+        Pending memory p = _pending[id][user];
+        if (p.targetBlock == 0) revert NoPendingClaim();
+        if (block.number <= p.targetBlock) revert TooEarly();
+        if (_blockHash(p.targetBlock) != bytes32(0)) revert NotExpired();
+        amount = lowestReward[id];
+        emit ClaimExpiredFallback(id, p.handleHash, user);
+        _finish(id, user, p, amount);
     }
 
     /// @notice Top up quest `id` with `amount` tokens (pulled from msg.sender). Anyone may
@@ -350,10 +407,16 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
 
     /// @notice Publish a quest and fund it in one transaction. Pulls `budget` tokens from
     ///         msg.sender (approve exactly `budget` first). msg.sender becomes the creator.
+    /// @param fcfsAmount FCFS: reward per claim (>= minReward, no max). RANDOM: must be 0.
+    /// @param tierAmounts RANDOM: 1..5 tier amounts (each >= minReward, no max). FCFS: empty.
+    /// @param tierChances RANDOM: whole-percent chance per tier (each >= 1, sum 100). FCFS: empty.
     /// @param targetPostId decimal X post ID to quote ("" = set later, before the first claim).
+    /// @param budget initial funding; must be >= minBudget and cover at least one claim.
     function createQuest(
         Mode mode,
         uint256 fcfsAmount,
+        uint256[] calldata tierAmounts,
+        uint8[] calldata tierChances,
         uint32 maxClaims,
         uint64 endTime,
         string calldata targetPostId,
@@ -366,13 +429,12 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
             if (creatorNeedsAgentId) _requireAgentId(msg.sender);
         }
         if (maxClaims == 0 || maxClaims > MAX_CLAIMS_LIMIT) revert BadParams();
-        if (mode == Mode.RANDOM ? fcfsAmount != 0 : fcfsAmount == 0) revert BadParams();
-        if (fcfsAmount > maxFcfsAmount) revert BadParams();
         if (endTime != 0 && endTime <= block.timestamp) revert BadParams();
         if (bytes(title).length == 0 || bytes(title).length > 120) revert BadParams();
         // Empty = target post not announced yet (the voucher server refuses to sign).
         if (bytes(targetPostId).length != 0) _checkPostId(targetPostId);
-        if (budget < minBudget) revert BudgetTooLow();
+        (uint256 unit, uint256 lowest) = _checkRewards(mode, fcfsAmount, tierAmounts, tierChances);
+        if (budget < minBudget || budget < unit) revert BudgetTooLow();
 
         id = ++campaignCount;
         Campaign storage c = _campaigns[id];
@@ -383,15 +445,22 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         c.targetPostId = targetPostId;
         c.title = title;
         creatorOf[id] = msg.sender;
+        rewardUnit[id] = unit;
+        lowestReward[id] = lowest;
         emit CampaignCreated(id, mode, fcfsAmount, maxClaims, endTime, targetPostId, title);
+        if (mode == Mode.RANDOM) {
+            _tierAmounts[id] = tierAmounts;
+            _tierChances[id] = tierChances;
+            emit TiersSet(id, tierAmounts, tierChances);
+        }
 
-        uint256 received;
-        if (budget != 0) received = _pull(id, budget);
-        if (received < minBudget) revert BudgetTooLow(); // fee-on-transfer safety
+        uint256 received = _pull(id, budget);
+        // fee-on-transfer safety: what arrived must still meet both minimums
+        if (received < minBudget || received < unit) revert BudgetTooLow();
         emit QuestCreated(id, msg.sender, received);
     }
 
-    /// @notice Change the X post to quote. Creator only, and only before the first claim.
+    /// @notice Set or change the X post to quote. Creator only, and only before the first claim.
     function setTargetPost(uint256 id, string calldata targetPostId) external {
         Campaign storage c = _campaign(id);
         _onlyCreator(id);
@@ -480,6 +549,21 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         return _campaigns[id];
     }
 
+    /// @notice RANDOM reward tiers of quest `id` (empty for FCFS).
+    function tiersOf(uint256 id)
+        external
+        view
+        returns (uint256[] memory amounts, uint8[] memory chancesPct)
+    {
+        if (id == 0 || id > campaignCount) revert UnknownCampaign();
+        return (_tierAmounts[id], _tierChances[id]);
+    }
+
+    /// @notice Default chances the site suggests for a 3-tier RANDOM quest (creators may change them).
+    function defaultTierChances() external pure returns (uint8[3] memory) {
+        return [uint8(30), 50, 20];
+    }
+
     /// @notice Funds of campaign `id` not reserved for pending RANDOM commits.
     function availableOf(uint256 id) public view returns (uint256) {
         Campaign storage c = _campaigns[id];
@@ -492,19 +576,13 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         if (id == 0 || id > campaignCount) return 0;
         Campaign storage c = _campaigns[id];
         uint256 free = uint256(c.maxClaims) - c.slotsUsed;
-        uint256 unit = c.mode == Mode.FCFS ? c.fcfsAmount : tier4;
-        uint256 byBudget = (c.balance - c.reserved) / unit;
+        uint256 byBudget = (c.balance - c.reserved) / rewardUnit[id];
         return free < byBudget ? free : byBudget;
     }
 
     function unallocated() public view returns (uint256) {
         uint256 bal = token.balanceOf(address(this));
         return bal > totalCampaignBalance ? bal - totalCampaignBalance : 0;
-    }
-
-    function tiers() external view returns (uint256[5] memory amounts, uint8[5] memory oddsPct) {
-        amounts = [tier0, tier1, tier2, tier3, tier4];
-        oddsPct = [uint8(50), 20, 20, 5, 5];
     }
 
     /// @notice Whether `user` can call {claim} on campaign `id` now, with a reason if not.
@@ -534,6 +612,7 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         return (true, "");
     }
 
+    /// @notice `expired` = the target block hash is no longer readable, so settling pays the lowest tier.
     function pendingClaim(uint256 id, address user)
         external
         view
@@ -552,25 +631,48 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         handleHash = p.handleHash;
         handle = p.handle;
         ready = exists && block.number > p.targetBlock;
-        expired = exists && block.number > uint256(p.targetBlock) + BLOCKHASH_WINDOW;
+        expired = ready && _blockHash(p.targetBlock) == bytes32(0);
     }
 
-    function randomSeed(uint256 id, bytes32 bh, address user, bytes32 handleHash)
-        public
+    function pendingCommits(uint256 id, address user)
+        external
         view
-        returns (uint256)
+        returns (bytes32 userCommit, bytes32 serverCommit)
     {
-        return
-            uint256(keccak256(abi.encode(bh, user, handleHash, id, address(this), block.chainid)));
+        Pending storage p = _pending[id][user];
+        return (p.userCommit, p.serverCommit);
     }
 
-    function tierFor(uint256 seed) public view returns (uint256) {
+    function randomSeed(
+        uint256 id,
+        bytes32 bh,
+        address user,
+        bytes32 handleHash,
+        bytes32 userSecret,
+        bytes32 serverSecret
+    ) public view returns (uint256) {
+        return uint256(
+            keccak256(
+                abi.encode(
+                    bh, userSecret, serverSecret, user, handleHash, id, address(this), block.chainid
+                )
+            )
+        );
+    }
+
+    /// @notice Tier amount for `seed` in quest `id` (r = seed % 100 walks the cumulative chances).
+    function tierFor(uint256 id, uint256 seed) public view returns (uint256) {
+        uint256[] storage a = _tierAmounts[id];
+        uint8[] storage ch = _tierChances[id];
+        uint256 n = a.length;
+        if (n == 0) return rewardUnit[id];
         uint256 r = seed % 100;
-        if (r < 50) return tier0;
-        if (r < 70) return tier1;
-        if (r < 90) return tier2;
-        if (r < 95) return tier3;
-        return tier4;
+        uint256 acc;
+        for (uint256 i; i < n; ++i) {
+            acc += ch[i];
+            if (r < acc) return a[i];
+        }
+        return a[n - 1];
     }
 
     function isPostUsed(bytes32 xPostIdHash) external view returns (bool) {
@@ -587,11 +689,19 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         address user,
         bytes32 xPostIdHash,
         bytes32 xAccountIdHash,
+        bytes32 serverCommit,
         uint256 deadline
     ) public pure returns (bytes32) {
         return keccak256(
             abi.encode(
-                VOUCHER_TYPEHASH, id, handleHash, user, xPostIdHash, xAccountIdHash, deadline
+                VOUCHER_TYPEHASH,
+                id,
+                handleHash,
+                user,
+                xPostIdHash,
+                xAccountIdHash,
+                serverCommit,
+                deadline
             )
         );
     }
@@ -602,13 +712,16 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
         address user,
         bytes32 xPostIdHash,
         bytes32 xAccountIdHash,
+        bytes32 serverCommit,
         uint256 deadline
     ) public view returns (bytes32) {
         return keccak256(
             abi.encodePacked(
                 "\x19\x01",
                 DOMAIN_SEPARATOR(),
-                hashVoucher(id, handleHash, user, xPostIdHash, xAccountIdHash, deadline)
+                hashVoucher(
+                    id, handleHash, user, xPostIdHash, xAccountIdHash, serverCommit, deadline
+                )
             )
         );
     }
@@ -655,6 +768,65 @@ contract QuestRewards is Ownable2Step, ReentrancyGuard {
 
     function _onlyCreator(uint256 id) internal view {
         if (msg.sender != creatorOf[id]) revert NotCreator();
+    }
+
+    /// @dev Validates rewards; returns (per-claim reservation unit, lowest payout).
+    function _checkRewards(
+        Mode mode,
+        uint256 fcfsAmount,
+        uint256[] calldata amts,
+        uint8[] calldata chances
+    ) internal view returns (uint256 unit, uint256 lowest) {
+        uint256 minR = minReward;
+        if (mode == Mode.FCFS) {
+            if (amts.length != 0 || chances.length != 0) revert BadTiers();
+            if (fcfsAmount < minR) revert RewardTooLow();
+            return (fcfsAmount, fcfsAmount);
+        }
+        if (fcfsAmount != 0) revert BadParams();
+        uint256 n = amts.length;
+        if (n == 0 || n > MAX_TIERS || chances.length != n) revert BadTiers();
+        uint256 sum;
+        lowest = type(uint256).max;
+        for (uint256 i; i < n; ++i) {
+            uint256 a = amts[i];
+            if (a < minR) revert RewardTooLow();
+            if (chances[i] == 0) revert BadTiers();
+            sum += chances[i];
+            if (a > unit) unit = a;
+            if (a < lowest) lowest = a;
+        }
+        if (sum != 100) revert BadTiers();
+    }
+
+    function _finish(uint256 id, address user, Pending memory p, uint256 amount) internal {
+        Campaign storage c = _campaigns[id];
+        delete _pending[id][user];
+        delete handlePendingBy[id][p.handleHash];
+        handleClaimed[id][p.handleHash] = true;
+        addressClaimed[id][user] = true;
+        rewardOfHandle[id][p.handleHash] = amount;
+        c.reserved -= rewardUnit[id];
+        c.balance -= amount;
+        c.totalPaid += amount;
+        c.settled += 1;
+        totalCampaignBalance -= amount;
+
+        token.safeTransfer(user, amount);
+        emit Claimed(id, p.handleHash, p.handle, user, amount, Mode.RANDOM);
+    }
+
+    /// @dev Hash of block `n`: BLOCKHASH for the last 256 blocks, else the EIP-2935 history
+    ///      contract (last 8191) when the chain has it, else 0 (= expired).
+    function _blockHash(uint64 n) internal view returns (bytes32 bh) {
+        if (n >= block.number) return bytes32(0);
+        bh = blockhash(n);
+        if (bh != bytes32(0)) return bh;
+        if (block.number - n > HISTORY_WINDOW || HISTORY_STORAGE.code.length == 0) {
+            return bytes32(0);
+        }
+        (bool ok, bytes memory ret) = HISTORY_STORAGE.staticcall(abi.encode(uint256(n)));
+        if (ok && ret.length == 32) bh = abi.decode(ret, (bytes32));
     }
 
     /// @dev Pull tokens into quest `id`; credits what actually arrived.

@@ -8,7 +8,12 @@ import { explorerTx } from "../config";
 import { useSession } from "../lib/session";
 import type { Tx } from "../lib/hooks";
 
-type Rules = { tokenSymbol: string; minBudget: string; maxFcfsRewardPerClaim: string; creatorNeedsAgentId: boolean; creationOpen: boolean };
+type Rules = { tokenSymbol: string; minBudget: string; minRewardPerClaim: string; creatorNeedsAgentId: boolean; creationOpen: boolean };
+type TierDraft = { amount: string; chance: string };
+
+const MAX_TIERS = 5;
+const DEFAULT_TIERS: TierDraft[] = [{ amount: "", chance: "30" }, { amount: "", chance: "50" }, { amount: "", chance: "20" }];
+const num = (v: string) => (/^\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : NaN);
 type TaskType = "follow" | "like" | "retweet" | "quote" | "post";
 type TaskDraft = { type: TaskType; target: string; requiredText: string };
 
@@ -20,17 +25,46 @@ export function Publish() {
   const { request } = useAgentTx();
   const rules = useQuery({ queryKey: ["publish-rules"], queryFn: async () => (await fetch("/api/publish")).json() as Promise<{ ok: boolean; rules?: Rules; error?: string }> });
   const r = rules.data?.rules;
-  const [f, setF] = useState({ title: "", mode: "FCFS", rewardPerClaim: "0.10", maxClaims: "10", budget: "1", postUrl: "", durationDays: "7" });
+  const [f, setF] = useState({ title: "", mode: "FCFS", rewardPerClaim: "0.10", maxClaims: "10", budget: "1", durationDays: "7" });
+  const [tiers, setTiers] = useState<TierDraft[]>(DEFAULT_TIERS);
+  const setTier = (i: number, k: keyof TierDraft, v: string) => setTiers(tiers.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "err" | "muted"; text: string; hash?: string } | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
 
+  const minReward = Number(r?.minRewardPerClaim ?? "0.05");
+  const minBudget = Number(r?.minBudget ?? "0.1");
+  const isRandom = f.mode === "RANDOM";
+  const chanceSum = tiers.reduce((s, t) => s + (Number.isInteger(Number(t.chance)) ? Number(t.chance) : 0), 0);
+  const unit = isRandom ? Math.max(0, ...tiers.map((t) => num(t.amount) || 0)) : num(f.rewardPerClaim) || 0;
+  const budgetN = num(f.budget);
+  const formError = (() => {
+    if (!isRandom) {
+      if (!(num(f.rewardPerClaim) >= minReward)) return `Reward per claim must be at least ${minReward}.`;
+    } else {
+      if (tiers.length < 1 || tiers.length > MAX_TIERS) return `Use 1 to ${MAX_TIERS} reward tiers.`;
+      for (const [i, t] of tiers.entries()) {
+        if (!(num(t.amount) >= minReward)) return `Tier ${i + 1}: enter an amount of at least ${minReward}.`;
+        const c = Number(t.chance);
+        if (!Number.isInteger(c) || c < 1 || c > 100) return `Tier ${i + 1}: chance must be a whole number from 1 to 100.`;
+      }
+      if (chanceSum !== 100) return `Chances must add up to 100% (now ${chanceSum}%).`;
+    }
+    const mc = Number(f.maxClaims);
+    if (!Number.isInteger(mc) || mc < 1 || mc > 1_000_000) return "Max claims must be a whole number from 1 to 1,000,000.";
+    if (!(budgetN >= minBudget)) return `Budget must be at least ${minBudget}.`;
+    if (budgetN < unit) return `Budget must cover at least one claim (${unit}${isRandom ? ", the largest tier" : ""}).`;
+    return null;
+  })();
+  const coveredClaims = unit > 0 && budgetN > 0 ? Math.floor(budgetN / unit + 1e-9) : 0;
+
   const payload = {
     wallet: session?.wallet ?? "<my Agentic Wallet address>",
-    title: f.title || "<title>", mode: f.mode, ...(f.mode === "FCFS" ? { rewardPerClaim: f.rewardPerClaim } : {}),
-    maxClaims: Number(f.maxClaims), budget: f.budget, postUrl: f.postUrl || undefined, durationDays: Number(f.durationDays),
+    title: f.title || "<title>", mode: f.mode,
+    ...(isRandom ? { tiers: tiers.map((t) => ({ amount: t.amount || "<amount>", chancePct: Number(t.chance) })) } : { rewardPerClaim: f.rewardPerClaim }),
+    maxClaims: Number(f.maxClaims), budget: f.budget, durationDays: Number(f.durationDays),
   };
   const prompt = [
     `Publish a quest on Agentic Quest (${SITE}) with my Agentic Wallet. Read ${SITE}/llms.txt first.`,
@@ -84,8 +118,8 @@ export function Publish() {
       {r && (
         <ul className="rules panel" aria-label="Publishing rules">
           <li><span>Budget</span><span>min {r.minBudget} {r.tokenSymbol}, no max</span></li>
-          <li><span>Fixed reward per claim</span><span>up to {r.maxFcfsRewardPerClaim}</span></li>
-          <li><span>Random reward per claim</span><span>0.05–0.20</span></li>
+          <li><span>Reward per claim</span><span>min {r.minRewardPerClaim}, no max</span></li>
+          <li><span>Random tiers</span><span>1–5, chances total 100%</span></li>
           <li><span>Creator needs an Agent ID</span><span>{r.creatorNeedsAgentId ? "yes" : "no"}</span></li>
           <li><span>Publishing</span><span>{r.creationOpen ? "open" : "closed"}</span></li>
           <li><span>Platform fee</span><span>0</span></li>
@@ -93,17 +127,35 @@ export function Publish() {
       )}
       <div className="stack-lg panel form-panel">
         <label className="field"><span className="field-label">Title</span><input maxLength={120} value={f.title} onChange={set("title")} placeholder="Quote our launch post" /></label>
-        <label className="field"><span className="field-label">X post to quote</span><input value={f.postUrl} onChange={set("postUrl")} placeholder="https://x.com/you/status/… (can be set later)" /></label>
         <div className="field-row two">
           <label className="field"><span className="field-label">Mode</span>
             <select value={f.mode} onChange={set("mode")}><option value="FCFS">First come</option><option value="RANDOM">Random</option></select></label>
-          {f.mode === "FCFS" && <label className="field"><span className="field-label">Reward per claim</span><input inputMode="decimal" value={f.rewardPerClaim} onChange={set("rewardPerClaim")} /></label>}
+          {!isRandom && <label className="field"><span className="field-label">Reward per claim</span><input inputMode="decimal" value={f.rewardPerClaim} onChange={set("rewardPerClaim")} /><span className="field-hint">Min {r?.minRewardPerClaim ?? "0.05"}, no max</span></label>}
         </div>
+        {isRandom && (
+          <section className="tiers stack" aria-labelledby="tiers-heading">
+            <div className="row-wrap"><h2 id="tiers-heading" className="section-label">Reward tiers</h2>
+              <button type="button" className="btn btn-sm btn-secondary" disabled={tiers.length >= MAX_TIERS} onClick={() => setTiers([...tiers, { amount: "", chance: "" }])}>Add tier</button></div>
+            <p className="small muted">Each claimer gets one of these amounts at random. Default chances are 30%, 50% and 20%; you can change them.</p>
+            <div className="tier-head" aria-hidden="true"><span>Amount, USDT</span><span>Chance</span><span /></div>
+            {tiers.map((t, i) => (
+              <div className="tier-row" key={i}>
+                <label className="field"><span className="sr-only">Tier {i + 1} amount</span><input inputMode="decimal" value={t.amount} placeholder={["0.05", "0.10", "0.50", "1", "2"][i] ?? "0.05"} onChange={(e) => setTier(i, "amount", e.target.value)} /></label>
+                <label className="field tier-chance"><span className="sr-only">Tier {i + 1} chance</span><input inputMode="numeric" value={t.chance} onChange={(e) => setTier(i, "chance", e.target.value.replace(/[^0-9]/g, ""))} /><i aria-hidden="true">%</i></label>
+                <button type="button" className="btn btn-sm btn-ghost tier-x" aria-label={`Remove tier ${i + 1}`} disabled={tiers.length <= 1} onClick={() => setTiers(tiers.filter((_, j) => j !== i))}>✕</button>
+              </div>
+            ))}
+            <p className="field-hint">Min {r?.minRewardPerClaim ?? "0.05"}, no max · Chances total <strong className={chanceSum === 100 ? "ok" : "err"}>{chanceSum}%</strong>{chanceSum !== 100 && " (must be 100%)"}</p>
+            <button type="button" className="btn btn-sm btn-ghost btn-fit" onClick={() => setTiers(tiers.length === 3 ? tiers.map((t, i) => ({ ...t, chance: DEFAULT_TIERS[i].chance })) : DEFAULT_TIERS)}>Reset chances to 30 / 50 / 20</button>
+          </section>
+        )}
         <div className="field-row two">
           <label className="field"><span className="field-label">Max claims</span><input inputMode="numeric" value={f.maxClaims} onChange={set("maxClaims")} /></label>
-          <label className="field"><span className="field-label">Budget, USDT</span><input inputMode="decimal" value={f.budget} onChange={set("budget")} /><span className="field-hint">Min {r?.minBudget ?? "1"}, no max</span></label>
+          <label className="field"><span className="field-label">Budget, USDT</span><input inputMode="decimal" value={f.budget} onChange={set("budget")} /><span className="field-hint">Min {r?.minBudget ?? "0.1"}, no max</span></label>
         </div>
         <label className="field"><span className="field-label">Duration (days)</span><input inputMode="numeric" value={f.durationDays} onChange={set("durationDays")} /></label>
+        {unit > 0 && budgetN > 0 && !formError && <p className="small muted">{isRandom ? `The largest tier (${unit}) is held for each pending claim. ` : ""}Your budget covers {coveredClaims.toLocaleString()} of {Number(f.maxClaims).toLocaleString()} claims.</p>}
+        <p className="small muted">You can add the X post claimers must quote after publishing, from your quest page (Manage → Set X post). Claims open once it's set.</p>
 
         <section className="stack" aria-labelledby="optional-tasks-heading">
           <div className="row-wrap"><h2 id="optional-tasks-heading" className="section-label">Optional X tasks</h2><button type="button" className="btn btn-sm btn-secondary" disabled={tasks.length >= 10} onClick={() => setTasks([...tasks, { type: "follow", target: "", requiredText: "" }])}>Add task</button></div>
@@ -122,7 +174,8 @@ export function Publish() {
           <Copy text={prompt} label="Copy for my agent" />
         </div>
         {!session ? <button className="btn btn-secondary btn-fit" onClick={() => openSignIn(true)}>Or sign in to prepare it here</button>
-          : <button className="btn btn-primary btn-fit" disabled={busy || !f.title} onClick={prepareAndSend}>{busy ? "Working…" : "Prepare transactions"}</button>}
+          : <button className="btn btn-primary btn-fit" disabled={busy || !f.title || !!formError} onClick={prepareAndSend}>{busy ? "Working…" : "Prepare transactions"}</button>}
+        {formError && <p className="field-msg err" role="status">{formError}</p>}
         {warnings.length > 0 && <ul className="small muted">{warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
         {msg && <p className={`field-msg ${msg.tone}`}>{msg.text}{msg.hash && <> · <a href={explorerTx(msg.hash)} target="_blank" rel="noreferrer">tx ↗</a></>}</p>}
         <p className="small muted">Quests are run by their creators. Don't promise returns or present a quest as official Binance/BNB Chain activity; such quests can be blocked.</p>
