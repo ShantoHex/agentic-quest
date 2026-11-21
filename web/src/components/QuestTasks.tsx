@@ -25,6 +25,7 @@ export function useQuestTaskState(campaignId: string, session: Session | null) {
 export function QuestTasks({ campaignId, session }: { campaignId: string; session: Session | null }) {
   const cache = useQueryClient();
   const [handle, setHandle] = useState("");
+  const [editing, setEditing] = useState(false);
   const [postUrls, setPostUrls] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
   const state = useQuestTaskState(campaignId, session);
@@ -61,8 +62,13 @@ export function QuestTasks({ campaignId, session }: { campaignId: string; sessio
   }
 
   async function linkHandle() {
-    try { await action({ action: "link", handle }); setNotice("X handle linked."); }
+    try { await action({ action: "link", handle }); setEditing(false); setNotice("X handle linked."); }
     catch (e) { setNotice(e instanceof Error ? e.message : "Could not link handle."); }
+  }
+
+  async function unlinkHandle() {
+    try { await action({ action: "unlink" }); setHandle(""); setEditing(false); setNotice("X handle unlinked."); }
+    catch (e) { setNotice(e instanceof Error ? e.message : "Could not unlink handle."); }
   }
 
   if (!session) return <section className="panel stack"><h2>Quest tasks</h2><p className="small muted">Sign in to track task progress before claiming.</p></section>;
@@ -72,8 +78,8 @@ export function QuestTasks({ campaignId, session }: { campaignId: string; sessio
   return <section className="panel stack" aria-labelledby="task-heading">
     <h2 id="task-heading">Quest tasks</h2>
     <p className="small muted">Finish every required task to unlock claiming. Follow, like, and retweet checks are self-verified.</p>
-    {!state.data.xHandle ? <div className="row-wrap"><label className="field"><span className="field-label">Your X handle</span><input value={handle} maxLength={16} onChange={(e) => setHandle(e.target.value)} placeholder="@yourhandle" /></label><button className="btn btn-secondary btn-fit" onClick={linkHandle} disabled={!handle.trim()}>Link handle</button></div>
-      : <p className="small muted">Linked X handle: <strong>@{state.data.xHandle}</strong> · self-reported</p>}
+    {(!state.data.xHandle || editing) ? <div className="row-wrap"><label className="field"><span className="field-label">Your X handle</span><input value={handle} maxLength={16} onChange={(e) => setHandle(e.target.value)} placeholder="@yourhandle" /></label><button className="btn btn-secondary btn-fit" onClick={linkHandle} disabled={!handle.trim()}>{state.data.xHandle ? "Save handle" : "Link handle"}</button>{editing ? <button className="btn btn-sm btn-secondary" onClick={() => { setEditing(false); setHandle(""); }}>Cancel</button> : null}</div>
+      : <div className="row-wrap"><p className="small muted">Linked X handle: <strong>@{state.data.xHandle}</strong> · self-reported</p><button className="btn btn-sm btn-secondary" onClick={() => { setHandle(state.data.xHandle ?? ""); setEditing(true); }}>Change</button><button className="btn btn-sm btn-secondary" onClick={unlinkHandle}>Unlink</button></div>}
     <ul className="stack">
       {state.data.tasks.map((task) => <li className="task-row" key={task.id}>
         <div className="row-wrap task-heading"><strong>{task.type === "post" ? "Post" : task.type[0].toUpperCase() + task.type.slice(1)} on X</strong><span className={`small ${completed.has(task.id) ? "ok" : "muted"}`}>{completed.has(task.id) ? "Complete" : task.type === "follow" || task.type === "like" || task.type === "retweet" ? "Self-verified" : "Needs verification"}</span></div>

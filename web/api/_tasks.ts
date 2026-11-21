@@ -71,7 +71,7 @@ export async function readProfile(wallet: string): Promise<{ xHandle?: string }>
   return readJson(`quest-task-profiles/${wallet.toLowerCase()}.json`, {});
 }
 
-export async function saveProfile(wallet: string, profile: { xHandle: string }) {
+export async function saveProfile(wallet: string, profile: { xHandle?: string }) {
   await put(`quest-task-profiles/${wallet.toLowerCase()}.json`, JSON.stringify(profile), { access: "private", contentType: "application/json", addRandomSuffix: false, allowOverwrite: true });
 }
 

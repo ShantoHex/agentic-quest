@@ -21,6 +21,11 @@ export default async function handler(req: any, res: any) {
     await Promise.all([saveProfile(session.w, { xHandle: handle }), saveProgress(id, session.w, progress)]);
     return send(res, 200, { ok: true, xHandle: handle, note: "Handle is self-reported; post-task verification checks it against public post data." });
   }
+  if (b.action === "unlink") {
+    progress.xHandle = undefined;
+    await Promise.all([saveProfile(session.w, {}), saveProgress(id, session.w, progress)]);
+    return send(res, 200, { ok: true, xHandle: null });
+  }
   const task = tasks.find((item) => item.id === b.taskId);
   if (!task) return send(res, 404, { ok: false, error: "Task not found." });
   if (b.action === "start") {
@@ -28,7 +33,7 @@ export default async function handler(req: any, res: any) {
     await saveProgress(id, session.w, progress);
     return send(res, 200, { ok: true, startedAt: progress.started[task.id] });
   }
-  if (b.action !== "verify") return send(res, 400, { ok: false, error: "action must be link, start, or verify." });
+  if (b.action !== "verify") return send(res, 400, { ok: false, error: "action must be link, unlink, start, or verify." });
   if (task.type === "follow" || task.type === "like" || task.type === "retweet") {
     const started = progress.started[task.id];
     if (!started || Date.now() - started < 10_000) return send(res, 409, { ok: false, error: "Click Do it, wait at least 10 seconds, then verify." });
