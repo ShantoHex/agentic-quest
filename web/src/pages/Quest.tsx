@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { keccak256, toHex, type Hex } from "viem";
 import { Link, useParams } from "react-router-dom";
@@ -32,12 +33,14 @@ export function QuestPage() {
   const q = useCampaigns();
   const fmt = useFmt(q.data?.token);
   const c = q.data?.campaigns.find((x) => x.id === id);
+  const meta = useQuery({ queryKey: ["quest-meta", id], queryFn: async () => (await fetch(`/api/quest-meta?campaignId=${id}`)).json() as Promise<{ ok: boolean; description?: string }> });
   const { session, openSignIn } = useSession();
   const taskState = useQuestTaskState(id ?? "", session);
   const me = useMyAgentId();
   const config = useConfig();
   const { request } = useAgentTx();
   const [postUrl, setPostUrl] = useState("");
+  const [fundAmt, setFundAmt] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "err" | "muted"; text: string; hash?: string } | null>(null);
 
@@ -63,11 +66,11 @@ export function QuestPage() {
       const r = await fetch(VERIFY_API, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
-        body: JSON.stringify({ campaignId: c.id, postUrl, wallet: session.wallet, ...(c.mode === "RANDOM" ? { userCommit: keccak256(newSecret(c.id, session.wallet)) } : {}) }),
+        body: JSON.stringify({ campaignId: c.id, ...(c.targetPostId ? { postUrl } : {}), wallet: session.wallet, ...(c.mode === "RANDOM" ? { userCommit: keccak256(newSecret(c.id, session.wallet)) } : {}) }),
       });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "Verification failed.");
-      setMsg({ tone: "ok", text: `Post verified (@${j.username}).` });
+      setMsg({ tone: "ok", text: j.noPost ? "Ready to claim." : `Post verified (@${j.username}).` });
       await sendTx(j.tx);
     } catch (e) { setMsg({ tone: "err", text: e instanceof Error ? e.message : "Verification failed." }); }
     setBusy(false);
@@ -119,6 +122,7 @@ export function QuestPage() {
         </dl>
         <Bar left={Number(c.remainingSlots)} total={Number(c.maxClaims)} />
       </section>
+      {meta.data?.description ? <p className="q-note">{meta.data.description}</p> : null}
       <p className="q-note">
         {c.mode === "FCFS"
           ? "Fixed reward, paid in the claim transaction, to the first claimers until slots or budget run out."
@@ -143,11 +147,11 @@ export function QuestPage() {
                 {MOCK_REGISTRY && <TestHandleMint onDone={() => me.refetch()} />}
               </>}
         </li>
-        <li>
-          <strong>Quote the quest post on X</strong>
+        <li className={c.targetPostUrl ? "" : "done"}>
+          <strong>{c.targetPostUrl ? "Quote the quest post on X" : "Quote step"}</strong>
           {c.targetPostUrl
             ? <a className="btn btn-secondary btn-fit" href={`https://x.com/intent/tweet?url=${encodeURIComponent(c.targetPostUrl)}&text=${encodeURIComponent("Just claimed $0.2 on Agentic Quest ✅\n\nNow claim yours → https://agentic-quest.vercel.app\n\n#AgenticQuest #BinanceWalletHackathon #AgenticWallet")}`} target="_blank" rel="noreferrer">Quote on X ↗</a>
-            : <span className="small muted">The post for this quest isn't announced yet.</span>}
+            : <span className="small muted">This quest has no X post — no quote needed, claim directly below.</span>}
         </li>
         <li className={you?.claimed ? "done" : ""}>
           <strong>{c.mode === "FCFS" ? "Claim" : "Claim, then settle"}</strong>
@@ -168,12 +172,16 @@ export function QuestPage() {
                 <span className="small muted">This quest has ended.</span>
                 <button className="btn btn-primary btn-fit" disabled>Ended</button>
               </>
-            ) : you?.canClaim && c.targetPostId && tasksSatisfied ? (
-              <>
-                <input placeholder="Link to your quote post: https://x.com/you/status/…" value={postUrl} onChange={(e) => setPostUrl(e.target.value)} />
-                <button className="btn btn-primary btn-fit" disabled={busy || !/status\/\d+/.test(postUrl)} onClick={verifyAndClaim}>{busy ? "Verifying…" : "Verify & claim"}</button>
-              </>
-            ) : you?.canClaim && c.targetPostId && !tasksSatisfied ? <span className="small muted">{taskState.isError ? "Could not load required tasks." : "Complete all required tasks above before claiming."}</span>
+            ) : you?.canClaim && tasksSatisfied ? (
+              c.targetPostId ? (
+                <>
+                  <input placeholder="Link to your quote post: https://x.com/you/status/…" value={postUrl} onChange={(e) => setPostUrl(e.target.value)} />
+                  <button className="btn btn-primary btn-fit" disabled={busy || !/status\/\d+/.test(postUrl)} onClick={verifyAndClaim}>{busy ? "Verifying…" : "Verify & claim"}</button>
+                </>
+              ) : (
+                <button className="btn btn-primary btn-fit" disabled={busy} onClick={verifyAndClaim}>{busy ? "Preparing…" : "Claim"}</button>
+              )
+            ) : you?.canClaim && !tasksSatisfied ? <span className="small muted">{taskState.isError ? "Could not load required tasks." : "Complete all required tasks above before claiming."}</span>
               : <span className="small muted">Not claimable{you?.reason ? `: ${you.reason}` : ""}.</span>}
         </li>
       </ol>
@@ -187,6 +195,11 @@ export function QuestPage() {
               <button className="btn btn-sm btn-secondary" disabled={busy} onClick={() => manage("withdraw")}>Withdraw leftover</button>
               {c.slotsUsed === 0 && <button className="btn btn-sm btn-secondary" disabled={busy} onClick={() => { const u = window.prompt("Link to the X post claimers must quote"); if (u) manage("setPost", { postUrl: u }); }}>Set X post</button>}
             </div>
+            <div className="row-wrap">
+              <label className="field"><span className="field-label">Add funds, USDT</span><input inputMode="decimal" value={fundAmt} onChange={(e) => setFundAmt(e.target.value)} placeholder="1" /></label>
+              <button className="btn btn-sm btn-secondary" disabled={busy || !(Number(fundAmt) > 0)} onClick={() => manage("fund", { amount: fundAmt })}>Add funds</button>
+            </div>
+            <span className="small muted">Added funds open more claim slots (one slot per reward paid), up to the quest's max of {c.maxClaims} slots.</span>
           </div>
         </details>
       )}

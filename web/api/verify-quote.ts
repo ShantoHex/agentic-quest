@@ -94,14 +94,18 @@ async function campaignVoucher(req: any, res: any, body: any) {
   if (!isAddress(wallet)) return send(res, 400, { ok: false, code: "BAD_WALLET", error: "Invalid wallet address." });
   const user = getAddress(wallet) as Address;
   if (sess && sess.w.toLowerCase() !== user.toLowerCase()) return send(res, 403, { ok: false, code: "WALLET_MISMATCH", error: "Signed-in wallet differs from the wallet in the request." });
-  const parsed = parsePostUrl(String(body?.postUrl ?? "").slice(0, 300));
-  if (!parsed) return send(res, 400, { ok: false, code: "BAD_URL", error: "Paste the full link to your post, like https://x.com/you/status/123…" });
   const c = { address: QUEST_REWARDS, abi: qrAbi } as const;
   try {
     const camp = await client.readContract({ ...c, functionName: "getCampaign", args: [id] }).catch(() => null);
     if (!camp) return send(res, 404, { ok: false, code: "UNKNOWN_CAMPAIGN", error: "No such campaign." });
     const target = camp.targetPostId;
-    if (!/^\d+$/.test(target)) return send(res, 503, { ok: false, code: "TARGET_MISSING", error: "This campaign's post to quote has not been announced yet." });
+    // Optional X post: a quest with no target post claims without quoting anything.
+    // No contract change is needed — the contract never checks the target post; it only
+    // needs the voucher's post/account hashes to be unique per claimer so its replay
+    // guards still work (one claim per wallet / Agent ID).
+    const noPost = !/^\d+$/.test(target);
+    const parsed = noPost ? null : parsePostUrl(String(body?.postUrl ?? "").slice(0, 300));
+    if (!noPost && !parsed) return send(res, 400, { ok: false, code: "BAD_URL", error: "Paste the full link to your post, like https://x.com/you/status/123…" });
     const [bal, handleRaw] = await Promise.all([
       client.readContract({ address: REGISTRY, abi: registryAbi, functionName: "balanceOf", args: [user] }),
       client.readContract({ address: REGISTRY, abi: registryAbi, functionName: "handleOf", args: [user] }),
@@ -117,14 +121,23 @@ async function campaignVoucher(req: any, res: any, body: any) {
     const can = await client.readContract({ ...c, functionName: "canClaim", args: [id, user] });
     if (!can[0]) return send(res, 409, { ok: false, code: "CANNOT_CLAIM", error: `Cannot claim: ${can[1]}.` });
 
-    const post = await fetchPost(parsed.postId);
-    if (!post) return send(res, 404, { ok: false, code: "POST_NOT_FOUND", error: "Post not found. Make sure it is public and not deleted." });
-    if (post.id !== parsed.postId || !/^\d+$/.test(post.authorId)) return send(res, 502, { ok: false, code: "BAD_DATA", error: "Could not read the post author." });
-    if (post.quotedId !== target) return send(res, 400, { ok: false, code: "NOT_A_QUOTE", error: `This post doesn't quote the campaign post (https://x.com/i/status/${target}).` });
+    let post: Awaited<ReturnType<typeof fetchPost>> = null;
+    if (!noPost) {
+      post = await fetchPost(parsed!.postId);
+      if (!post) return send(res, 404, { ok: false, code: "POST_NOT_FOUND", error: "Post not found. Make sure it is public and not deleted." });
+      if (post.id !== parsed!.postId || !/^\d+$/.test(post.authorId)) return send(res, 502, { ok: false, code: "BAD_DATA", error: "Could not read the post author." });
+      if (post.quotedId !== target) return send(res, 400, { ok: false, code: "NOT_A_QUOTE", error: `This post doesn't quote the campaign post (https://x.com/i/status/${target}).` });
+    }
 
     const handleHash = keccak256(toBytes(handle));
-    const xPostIdHash = keccak256(toBytes(post.id));
-    const xAccountIdHash = keccak256(toBytes(post.authorId));
+    // No-post claims use per-claimant hashes (unique per campaign + wallet) so the
+    // contract's usedPost / usedAccount guards still prevent replays.
+    const xPostIdHash = noPost
+      ? keccak256(toBytes(`aq-no-post|${CHAIN_ID}|${id}|${user.toLowerCase()}`))
+      : keccak256(toBytes(post!.id));
+    const xAccountIdHash = noPost
+      ? keccak256(toBytes(`aq-no-post-account|${CHAIN_ID}|${id}|${user.toLowerCase()}`))
+      : keccak256(toBytes(post!.authorId));
     const [postUsed, accountUsed] = await Promise.all([
       client.readContract({ ...c, functionName: "isPostUsed", args: [xPostIdHash] }),
       client.readContract({ ...c, functionName: "isAccountUsed", args: [id, xAccountIdHash] }),
@@ -165,13 +178,16 @@ async function campaignVoucher(req: any, res: any, body: any) {
       message: { campaignId: id, handleHash, user, xPostIdHash, xAccountIdHash, serverCommit, deadline },
     });
     if (process.env.BLOB_READ_WRITE_TOKEN) {
-      const record = { campaignId: id.toString(), handle, xUsername: post.username, xUserId: post.authorId, postId: post.id, wallet: user, quotedPostId: post.quotedId, postCreatedAt: post.createdAt, verifiedAt: new Date().toISOString(), chainId: CHAIN_ID, contract: QUEST_REWARDS, via: sess ? "agent-session" : "anonymous" };
-      await put(`submissions/${CHAIN_ID}/v3/${id}/${handle}/${post.id}.json`, JSON.stringify(record), {
+      const record = noPost
+        ? { campaignId: id.toString(), handle, xUsername: null, xUserId: null, postId: null, wallet: user, quotedPostId: null, postCreatedAt: null, verifiedAt: new Date().toISOString(), chainId: CHAIN_ID, contract: QUEST_REWARDS, via: sess ? "agent-session" : "anonymous", noPost: true }
+        : { campaignId: id.toString(), handle, xUsername: post!.username, xUserId: post!.authorId, postId: post!.id, wallet: user, quotedPostId: post!.quotedId, postCreatedAt: post!.createdAt, verifiedAt: new Date().toISOString(), chainId: CHAIN_ID, contract: QUEST_REWARDS, via: sess ? "agent-session" : "anonymous" };
+      await put(`submissions/${CHAIN_ID}/v3/${id}/${handle}/${noPost ? "no-post" : post!.id}.json`, JSON.stringify(record), {
         access: "private", contentType: "application/json", addRandomSuffix: false, allowOverwrite: true,
       }).catch((e) => console.error("blob log failed:", e instanceof Error ? e.message : "unknown"));
     }
     return send(res, 200, {
-      ok: true, campaignId: id.toString(), mode, handle, username: post.username, xUserId: post.authorId, postId: post.id,
+      ok: true, campaignId: id.toString(), mode, handle,
+      ...(noPost ? { noPost: true, username: null, xUserId: null, postId: null } : { username: post!.username, xUserId: post!.authorId, postId: post!.id }),
       voucher: { campaignId: id.toString(), xPostIdHash, xAccountIdHash, serverCommit, userCommit, deadline: deadline.toString(), signature },
       tx: txFor(user, encodeClaim(id, xPostIdHash, xAccountIdHash, serverCommit, userCommit, deadline, signature), mode === "FCFS" ? `Claim FCFS reward (campaign ${id})` : `Commit RANDOM claim (campaign ${id}); settle after 2 blocks`),
       ...(generatedUserSecret ? { userSecret: generatedUserSecret, userSecretNote: "KEEP THIS: needed to settle. It is not stored on the server. Lost secret = lowest tier after the reveal window." } : {}),

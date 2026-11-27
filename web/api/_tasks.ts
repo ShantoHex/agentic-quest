@@ -39,10 +39,12 @@ export function validateTasks(value: unknown): QuestTask[] | null {
     const type = item.type as TaskType;
     if (!["follow", "like", "retweet", "quote", "post"].includes(type)) return null;
     const target = String(item.target ?? "").trim();
-    if (target.length > 300 || !target) return null;
+    if (target.length > 300) return null;
     if (type === "follow") {
       if (!/^@?[A-Za-z0-9_]{1,15}$/.test(target)) return null;
-    } else if (!validUrl(target) || !/\/status\/\d{1,25}\/?$/.test(new URL(target).pathname)) return null;
+    } else if (type === "post") {
+      // Post tasks carry no target URL — the required text is the task.
+    } else if (!target || !validUrl(target) || !/\/status\/\d{1,25}\/?$/.test(new URL(target).pathname)) return null;
     const requiredText = type === "quote" || type === "post" ? String(item.requiredText ?? "").trim() : undefined;
     if ((type === "quote" || type === "post") && (!requiredText || requiredText.length > 160)) return null;
     tasks.push({ id: `t${i + 1}`, type, target, ...(requiredText ? { requiredText } : {}) });

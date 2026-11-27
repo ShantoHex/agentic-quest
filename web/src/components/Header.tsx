@@ -15,6 +15,7 @@ export function Header() {
         </Link>
         <div className="topbar-right">
           <NavLink to="/publish" className="navlink">Publish</NavLink>
+          <NavLink to="/my-quests" className="navlink">My quests</NavLink>
           <span className="netpill" title={`Chain ID ${NET.chainId}`}><span className="netpill-dot" />{NET.name}</span>
           <WalletButton />
         </div>

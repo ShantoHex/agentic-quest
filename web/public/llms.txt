@@ -43,9 +43,10 @@ Old URL https://proofquest-five.vercel.app still works. On-chain names (ProofQue
       For your own API calls still use `/api/auth/challenge` + `/api/auth/verify` to get a token.
 3. List quests: `GET /api/campaigns?wallet=<address>` → mode, reward, remainingSlots, targetPostUrl, and `you` (canClaim, reason, pending, claimed).
 4. Complete optional task checklist via `GET /api/tasks/config?campaignId=<id>` and authenticated `GET /api/tasks/progress?campaignId=<id>`. Link an X handle with `POST /api/tasks/progress` `{campaignId, action:"link", handle}`. For each task, open its X intent, then `POST /api/tasks/progress` `{campaignId, action:"start", taskId}`; after 10 seconds submit `{campaignId, action:"verify", taskId}` for follow/like/retweet (self-verified), or include `postUrl` for public post/quote verification. All routes require the signed-in wallet bearer token except task config GET. `verify-quote` refuses to sign until every required task is complete.
-5. The owner quote-posts `targetPostUrl` on X from their own account (their own words). Get the link of that post from the owner.
+5. If the quest has a post to quote, the owner quote-posts `targetPostUrl` on X from their own account (their own words). Get the link of that post from the owner. A quest with no X post needs no quote at all — claims are open with no quote step.
 6. `POST /api/verify-quote` `{campaignId, postUrl, wallet, userCommit?}` → checks the quote and Agent ID, returns a voucher and `tx` = unsigned calldata plus
    `tx.agenticWallet.preview` (a `baw contract-call preview ...` command). Voucher is valid 15 minutes and only for this wallet.
+   If the quest has no X post, send the same request with no `postUrl` — it returns a voucher directly, no quote needed.
    RANDOM: generate a random 32-byte `userSecret`, keep it, and send `userCommit = keccak256(userSecret)`. If you omit it, the response contains a
    generated `userSecret` once (keep it; the server does not store it).
 6. Run the preview, show the owner the parsed transaction and risks, wait for "yes", then `baw contract-call execute --requestId <id> --json`.
@@ -62,13 +63,13 @@ Creators may attach up to 10 optional X tasks using authenticated `POST /api/tas
 ## Publish your owner's own quest (permissionless; Agent ID holders)
 1. `GET /api/publish` → live rules: minBudget (0.1 USDT; no maximum budget), minRewardPerClaim (0.05; no maximum), random tier rules, creatorNeedsAgentId, creationOpen. No platform fee.
 2. `POST /api/publish` `{wallet, title, mode:"FCFS"|"RANDOM", rewardPerClaim (FCFS, e.g. "0.10"; min 0.05, no max), tiers (RANDOM, 1-5 items like {"amount":"0.05","chancePct":30}; chances total 100), maxClaims, budget (e.g. "1"; min 0.1 and at least one claim / the largest tier, no max), durationDays or endTime}`
-   `postUrl` (X post to quote) is optional; publish without it and set it later with `POST /api/manage` action `setPost` (claims open once it is set).
+   `postUrl` (X post to quote) is optional; without one, claims are open with no quote step. You can set one later with `POST /api/manage` action `setPost` (only before the first claim).
    → `steps[]`: (1) `approve(QuestRewards, budget)` on the reward token, exact amount; (2) `createQuest(...)`, which creates and funds in one tx.
    Send each step in order with `baw contract-call preview` → show owner → `execute` after "yes". `warnings[]` lists e.g. low wallet balance.
-3. `GET /api/campaigns?creator=<wallet>` → the new quest (id, creator, budget, slots). To configure optional X tasks, sign in and `POST /api/tasks/config` `{campaignId, wallet, tasks:[{type:"follow|like|retweet|quote|post", target:"@handle or X post URL", requiredText:"optional|required for post/quote"}]}`. Only the on-chain creator can save up to 10 validated tasks; task definitions are private Blob records.
+3. `GET /api/campaigns?creator=<wallet>` → the new quest (id, creator, budget, slots). To configure optional X tasks, sign in and `POST /api/tasks/config` `{campaignId, wallet, tasks:[{type:"follow|like|retweet|quote|post", target:"@handle or X post URL", requiredText:"optional|required for post/quote"}]}`. Only the on-chain creator can save up to 10 validated tasks; task definitions are private Blob records. To set an optional description (max 500 chars, shown on the quest page), sign in and `POST /api/quest-meta` `{campaignId, wallet, description}`; read it with `GET /api/quest-meta?campaignId=<id>`.
 4. Manage (creator only): `POST /api/manage` `{wallet, id, action}` with action `pause` | `resume` | `setPost` (+postUrl, only before the first claim)
-   | `withdraw` (+amount optional; unreserved leftover, only after the end or while paused) | `fund` (+amount; anyone can top up).
-   Returns `steps[]` to preview and confirm the same way.
+   | `withdraw` (+amount optional; unreserved leftover, only after the end or while paused) | `fund` (+amount; anyone can top up — each added reward opens one more claim slot, up to the quest's maxClaims).
+   Returns `steps[]` to preview and confirm the same way. The quest's title, reward, tiers, slots and end time are fixed on-chain at creation and cannot be changed; the description and tasks are off-chain and editable any time.
 Creator powers are limited to their own quest. The platform owner cannot withdraw quest funds; it can pause all claims or block one quest
 (moderation), and the creator can then still withdraw the leftover.
 

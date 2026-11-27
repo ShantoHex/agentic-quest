@@ -136,7 +136,7 @@
       "url": "https://agentic-quest.vercel.app/api/verify-quote",
       "body": {
         "campaignId": "1",
-        "postUrl": "https://x.com/<user>/status/<id>",
+        "postUrl": "https://x.com/<user>/status/<id> (omit when the quest has no X post — the voucher is issued directly)",
         "wallet": "0x…",
         "userCommit": "RANDOM: keccak256(userSecret), optional (else a userSecret is generated and returned once)"
       },
@@ -174,7 +174,7 @@
         ],
         "maxClaims": 50,
         "budget": "1 (min 0.1 and >= one claim / largest tier)",
-        "postUrl": "optional; set later via manageQuest setPost",
+        "postUrl": "optional; without one, claims are open with no quote step; set later via manageQuest setPost (before the first claim)",
         "durationDays": 7
       },
       "auth": "optional Bearer token (must match wallet)",
@@ -228,9 +228,21 @@
         "id": "3",
         "action": "pause|resume|setPost|withdraw|fund",
         "postUrl": "setPost only",
-        "amount": "withdraw/fund"
+        "amount": "withdraw/fund (fund opens more claim slots, up to maxClaims)"
       },
       "returns": "steps[] (creator-only except fund)"
+    },
+    {
+      "name": "questMeta",
+      "method": "GET|POST",
+      "url": "https://agentic-quest.vercel.app/api/quest-meta",
+      "auth": "GET: none; POST: Bearer signed-in creator session; on-chain creator check",
+      "body": {
+        "campaignId": "3",
+        "wallet": "0x…",
+        "description": "optional description, max 500 chars"
+      },
+      "returns": "quest description (off-chain metadata; the title is fixed on-chain)"
     }
   ],
   "transactions": {

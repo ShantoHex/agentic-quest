@@ -25,7 +25,7 @@ export function Publish() {
   const { request } = useAgentTx();
   const rules = useQuery({ queryKey: ["publish-rules"], queryFn: async () => (await fetch("/api/publish")).json() as Promise<{ ok: boolean; rules?: Rules; error?: string }> });
   const r = rules.data?.rules;
-  const [f, setF] = useState({ title: "", mode: "FCFS", rewardPerClaim: "0.10", maxClaims: "10", budget: "1", postUrl: "", durationDays: "7" });
+  const [f, setF] = useState({ title: "", mode: "FCFS", rewardPerClaim: "0.10", maxClaims: "10", budget: "1", postUrl: "", description: "", durationDays: "7" });
   const [tiers, setTiers] = useState<TierDraft[]>(DEFAULT_TIERS);
   const setTier = (i: number, k: keyof TierDraft, v: string) => setTiers(tiers.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
@@ -33,6 +33,7 @@ export function Publish() {
   const [msg, setMsg] = useState<{ tone: "ok" | "err" | "muted"; text: string; hash?: string } | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [tasks, setTasks] = useState<TaskDraft[]>([]);
+  const [live, setLive] = useState<{ id: string; title: string; txHash: string } | null>(null);
 
   const minReward = Number(r?.minRewardPerClaim ?? "0.05");
   const minBudget = Number(r?.minBudget ?? "0.1");
@@ -81,9 +82,11 @@ export function Publish() {
       const j = await res.json();
       if (!j.ok) throw new Error(j.error || "Could not prepare the quest.");
       setWarnings(j.warnings ?? []);
+      let createHash = ""; // the createQuest step is last, so this ends up as its tx hash
       for (const s of j.steps as (Tx & { step: number })[]) {
         const h = await request({ label: `Step ${s.step}: ${s.label}`, from: s.from, to: s.to, data: s.data, value: BigInt(s.value || "0") });
         if (!h) { setMsg({ tone: "muted", text: `Stopped at step ${s.step}.` }); setBusy(false); return; }
+        createHash = h;
         setMsg({ tone: "muted", text: `Step ${s.step}: waiting for confirmation…`, hash: h });
         const rc = await waitForTransactionReceipt(config, { hash: h, timeout: 180_000 }).catch(() => null);
         if (rc?.status !== "success") throw new Error(`Step ${s.step} failed or was not found.`);
@@ -96,10 +99,14 @@ export function Publish() {
       const quoteTaskPost = tasks.find((t) => t.type === "quote" && /\/status\/\d{1,25}/.test(t.target))?.target ?? "";
       const launchPost = f.postUrl.trim() || quoteTaskPost.trim();
       let postNote = "";
-      if (tasks.length || launchPost) {
+      // Always look up the new quest: the success screen needs its ID and link.
+      let created: { id: string; targetPostId?: string | null } | undefined;
+      try {
         const listed = await fetch(`/api/campaigns?creator=${session.wallet}`);
         const campaigns = await listed.json();
-        const created = (campaigns.campaigns ?? []).find((campaign: { creator: string; title: string; targetPostId?: string | null }) => campaign.creator.toLowerCase() === session.wallet.toLowerCase() && campaign.title === f.title);
+        created = (campaigns.campaigns ?? []).find((campaign: { creator: string; title: string; targetPostId?: string | null }) => campaign.creator.toLowerCase() === session.wallet.toLowerCase() && campaign.title === f.title);
+      } catch { /* lookup failed: still published, just no live screen */ }
+      if (tasks.length || launchPost || f.description.trim()) {
         if (!created) {
           if (tasks.length) throw new Error("Quest was published, but its task definitions could not be attached. Open the quest and retry setup with its campaign ID.");
           postNote = " The X post could not be attached automatically — set it from the quest page (Manage → Set X post).";
@@ -108,6 +115,11 @@ export function Publish() {
             const saved = await fetch("/api/tasks/config", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ campaignId: created.id, wallet: session.wallet, tasks }) });
             const savedResult = await saved.json();
             if (!saved.ok) throw new Error(savedResult.error || "Quest published, but task setup could not be saved.");
+          }
+          if (f.description.trim()) {
+            const ds = await fetch("/api/quest-meta", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ campaignId: created.id, wallet: session.wallet, description: f.description.trim() }) });
+            const dResult = await ds.json();
+            if (!ds.ok) throw new Error(dResult.error || "Quest published, but the description could not be saved.");
           }
           if (launchPost && !created.targetPostId) {
             const mr = await fetch("/api/manage", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ wallet: session.wallet, id: created.id, action: "setPost", postUrl: launchPost }) });
@@ -130,6 +142,7 @@ export function Publish() {
           }
         }
       }
+      if (created) setLive({ id: created.id, title: f.title, txHash: createHash });
       setMsg({ tone: "ok", text: "Quest published" + (tasks.length ? " with required X tasks." : ". It appears on the quest list in a few seconds.") + postNote });
     } catch (e) { setMsg({ tone: "err", text: e instanceof Error ? e.message : "Failed." }); }
     setBusy(false);
@@ -158,9 +171,25 @@ export function Publish() {
           <li><span>Platform fee</span><span>0</span></li>
         </ul>
       )}
+      {live ? (
+        <section className="panel stack" aria-label="Quest is live">
+          <h2>Quest is live</h2>
+          <p className="lede">“{live.title}” is live on Agentic Quest.</p>
+          <dl className="kv">
+            <div><dt>Quest link</dt><dd className="mono wrap">{`${SITE}/q/${live.id}`}</dd></div>
+            {live.txHash && <div><dt>Publish tx</dt><dd><a href={explorerTx(live.txHash)} target="_blank" rel="noreferrer">View on BscScan ↗</a></dd></div>}
+          </dl>
+          <div className="row-wrap">
+            <Copy text={`${SITE}/q/${live.id}`} label="Copy quest link" />
+            <Link className="btn btn-primary" to={`/q/${live.id}`}>View quest ↗</Link>
+            <button className="btn btn-secondary" onClick={() => { setLive(null); setF({ title: "", mode: "FCFS", rewardPerClaim: "0.10", maxClaims: "10", budget: "1", postUrl: "", description: "", durationDays: "7" }); setTiers(DEFAULT_TIERS); setTasks([]); setMsg(null); setWarnings([]); }}>Publish another quest</button>
+          </div>
+        </section>
+      ) : (
       <div className="stack-lg panel form-panel">
         <label className="field"><span className="field-label">Title</span><input maxLength={120} value={f.title} onChange={set("title")} placeholder="Quote our launch post" /></label>
         <label className="field"><span className="field-label">X post to quote</span><input value={f.postUrl} onChange={set("postUrl")} placeholder="https://x.com/you/status/… (can be set later)" /></label>
+        <label className="field"><span className="field-label">Description (optional)</span><textarea maxLength={500} value={f.description} onChange={set("description")} placeholder="What should claimers do, and why?" rows={3} /></label>
         <div className="field-row two">
           <label className="field"><span className="field-label">Mode</span>
             <select value={f.mode} onChange={set("mode")}><option value="FCFS">First come</option><option value="RANDOM">Random</option></select></label>
@@ -189,7 +218,7 @@ export function Publish() {
         </div>
         <label className="field"><span className="field-label">Duration (days)</span><input inputMode="numeric" value={f.durationDays} onChange={set("durationDays")} /></label>
         {unit > 0 && budgetN > 0 && !formError && <p className="small muted">{isRandom ? `The largest tier (${unit}) is held for each pending claim. ` : ""}Your budget covers {coveredClaims.toLocaleString()} of {Number(f.maxClaims).toLocaleString()} claims.</p>}
-        <p className="small muted">Enter the X post claimers must quote above — it is saved with the quest, and claims open once it's set. You can also add or change it later from your quest page (Manage → Set X post).</p>
+        <p className="small muted">Optional: enter the X post claimers must quote above. Without one, claims are open with no quote step. You can add one later from your quest page (Manage → Set X post, before the first claim).</p>
 
         <section className="stack" aria-labelledby="optional-tasks-heading">
           <div className="row-wrap"><h2 id="optional-tasks-heading" className="section-label">Optional X tasks</h2><button type="button" className="btn btn-sm btn-secondary" disabled={tasks.length >= 10} onClick={() => setTasks([...tasks, { type: "follow", target: "", requiredText: "" }])}>Add task</button></div>
@@ -214,6 +243,7 @@ export function Publish() {
         {msg && <p className={`field-msg ${msg.tone}`}>{msg.text}{msg.hash && <> · <a href={explorerTx(msg.hash)} target="_blank" rel="noreferrer">tx ↗</a></>}</p>}
         <p className="small muted">Quests are run by their creators. Don't promise returns or present a quest as official Binance/BNB Chain activity; such quests can be blocked.</p>
       </div>
+      )}
     </div>
   );
 }

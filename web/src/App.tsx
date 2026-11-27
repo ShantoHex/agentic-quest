@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { Header } from "./components/Header";
 import { AGENT_ID_REGISTRY, explorerAddress, NET, QUEST_REWARDS, SOURCE_URL } from "./config";
 import { Home } from "./pages/Home";
+import { MyQuests } from "./pages/MyQuests";
 import { QuestPage } from "./pages/Quest";
 import { Publish } from "./pages/Publish";
 
@@ -14,6 +15,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/q/:id" element={<QuestPage />} />
           <Route path="/publish" element={<Publish />} />
+          <Route path="/my-quests" element={<MyQuests />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
@@ -35,8 +37,8 @@ function Footer() {
         <details className="small">
           <summary>Owner powers &amp; risks</summary>
           <p className="muted">
-            Anyone with an Agent ID can publish and fund a quest. Each quest's funds are separate. Its creator can pause it, set its X post
-            (before the first claim) and withdraw its unreserved leftover after the end or while paused. The platform owner can: pause all
+            Anyone with an Agent ID can publish and fund a quest. Each quest's funds are separate. Its creator can pause it, add more funds (each added reward opens one more claim slot, up to the quest's max), set its X post
+            (before the first claim) and withdraw its unreserved leftover after the end or while paused. A quest with no X post stays open and claims without a quote step. The platform owner can: pause all
             new claims; block one quest's new claims (moderation; the creator can still withdraw); change the voucher signer; set creation
             rules (open/closed, Agent ID required, minimum budget; currently 0.1 USDT, no maximum); withdraw only tokens never credited to any quest; transfer or renounce
             ownership. The owner cannot withdraw quest funds. No proxy, no mint, no fee; funds reserved for pending claims can't be withdrawn.

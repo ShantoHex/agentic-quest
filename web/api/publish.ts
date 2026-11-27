@@ -114,7 +114,7 @@ export default async function handler(req: any, res: any) {
     const warnings: string[] = [];
     if (bal < budget) warnings.push(`Wallet holds ${fmt(bal)} ${cfg.symbol}; it needs ${fmt(budget)} ${cfg.symbol} before createQuest.`);
     if (slotsByBudget < BigInt(maxClaims)) warnings.push(`Budget covers ${slotsByBudget} of ${maxClaims} claims. Top up later with fundCampaign, or lower maxClaims.`);
-    if (!postId) warnings.push("No X post set yet: claims stay closed until you set it (POST /api/manage action=setPost).");
+    if (!postId) warnings.push("No X post set: claims are open without a quote step. You can set one later (POST /api/manage action=setPost, before the first claim).");
     if (endTime === 0) warnings.push("No end time: to withdraw leftovers later you must pause the quest first.");
     return send(res, 200, {
       ok: true, wallet, creatorAgentId: handle ? `${handle}.ai` : null,
