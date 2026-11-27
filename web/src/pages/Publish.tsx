@@ -25,7 +25,7 @@ export function Publish() {
   const { request } = useAgentTx();
   const rules = useQuery({ queryKey: ["publish-rules"], queryFn: async () => (await fetch("/api/publish")).json() as Promise<{ ok: boolean; rules?: Rules; error?: string }> });
   const r = rules.data?.rules;
-  const [f, setF] = useState({ title: "", mode: "FCFS", rewardPerClaim: "0.10", maxClaims: "10", budget: "1", durationDays: "7" });
+  const [f, setF] = useState({ title: "", mode: "FCFS", rewardPerClaim: "0.10", maxClaims: "10", budget: "1", postUrl: "", durationDays: "7" });
   const [tiers, setTiers] = useState<TierDraft[]>(DEFAULT_TIERS);
   const setTier = (i: number, k: keyof TierDraft, v: string) => setTiers(tiers.map((t, j) => (j === i ? { ...t, [k]: v } : t)));
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
@@ -64,7 +64,7 @@ export function Publish() {
     wallet: session?.wallet ?? "<my Agentic Wallet address>",
     title: f.title || "<title>", mode: f.mode,
     ...(isRandom ? { tiers: tiers.map((t) => ({ amount: t.amount || "<amount>", chancePct: Number(t.chance) })) } : { rewardPerClaim: f.rewardPerClaim }),
-    maxClaims: Number(f.maxClaims), budget: f.budget, durationDays: Number(f.durationDays),
+    maxClaims: Number(f.maxClaims), budget: f.budget, postUrl: f.postUrl || undefined, durationDays: Number(f.durationDays),
   };
   const prompt = [
     `Publish a quest on Agentic Quest (${SITE}) with my Agentic Wallet. Read ${SITE}/llms.txt first.`,
@@ -88,16 +88,49 @@ export function Publish() {
         const rc = await waitForTransactionReceipt(config, { hash: h, timeout: 180_000 }).catch(() => null);
         if (rc?.status !== "success") throw new Error(`Step ${s.step} failed or was not found.`);
       }
-      if (tasks.length) {
+      // The X post claimers must quote: from the field above, or (fallback) the target
+      // of the first "quote" task. /api/publish already stores it on-chain in createQuest
+      // when it is sent; this step only fires when the quest still has no post set, and
+      // saves it under the now-known quest ID in the same place Manage → Set X post
+      // writes it (contract setTargetPost), so claims open right away.
+      const quoteTaskPost = tasks.find((t) => t.type === "quote" && /\/status\/\d{1,25}/.test(t.target))?.target ?? "";
+      const launchPost = f.postUrl.trim() || quoteTaskPost.trim();
+      let postNote = "";
+      if (tasks.length || launchPost) {
         const listed = await fetch(`/api/campaigns?creator=${session.wallet}`);
         const campaigns = await listed.json();
-        const created = (campaigns.campaigns ?? []).find((campaign: { creator: string; title: string }) => campaign.creator.toLowerCase() === session.wallet.toLowerCase() && campaign.title === f.title);
-        if (!created) throw new Error("Quest was published, but its task definitions could not be attached. Open the quest and retry setup with its campaign ID.");
-        const saved = await fetch("/api/tasks/config", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ campaignId: created.id, wallet: session.wallet, tasks }) });
-        const savedResult = await saved.json();
-        if (!saved.ok) throw new Error(savedResult.error || "Quest published, but task setup could not be saved.");
+        const created = (campaigns.campaigns ?? []).find((campaign: { creator: string; title: string; targetPostId?: string | null }) => campaign.creator.toLowerCase() === session.wallet.toLowerCase() && campaign.title === f.title);
+        if (!created) {
+          if (tasks.length) throw new Error("Quest was published, but its task definitions could not be attached. Open the quest and retry setup with its campaign ID.");
+          postNote = " The X post could not be attached automatically — set it from the quest page (Manage → Set X post).";
+        } else {
+          if (tasks.length) {
+            const saved = await fetch("/api/tasks/config", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ campaignId: created.id, wallet: session.wallet, tasks }) });
+            const savedResult = await saved.json();
+            if (!saved.ok) throw new Error(savedResult.error || "Quest published, but task setup could not be saved.");
+          }
+          if (launchPost && !created.targetPostId) {
+            const mr = await fetch("/api/manage", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` }, body: JSON.stringify({ wallet: session.wallet, id: created.id, action: "setPost", postUrl: launchPost }) });
+            const mj = await mr.json();
+            if (!mj.ok) {
+              postNote = " The X post could not be attached automatically — set it from the quest page (Manage → Set X post).";
+            } else {
+              let attached = true;
+              for (const s of mj.steps as (Tx & { step: number })[]) {
+                const h = await request({ label: `Set X post: ${s.label}`, from: s.from, to: s.to, data: s.data, value: BigInt(s.value || "0") });
+                if (!h) { attached = false; break; }
+                setMsg({ tone: "muted", text: "Setting the X post: waiting for confirmation…", hash: h });
+                const rc = await waitForTransactionReceipt(config, { hash: h, timeout: 180_000 }).catch(() => null);
+                if (rc?.status !== "success") { attached = false; break; }
+              }
+              postNote = attached ? " X post attached — claims are open." : " The X post was not attached — set it from the quest page (Manage → Set X post).";
+            }
+          } else if (launchPost && created.targetPostId) {
+            postNote = " X post attached — claims are open.";
+          }
+        }
       }
-      setMsg({ tone: "ok", text: "Quest published" + (tasks.length ? " with required X tasks." : ". It appears on the quest list in a few seconds.") });
+      setMsg({ tone: "ok", text: "Quest published" + (tasks.length ? " with required X tasks." : ". It appears on the quest list in a few seconds.") + postNote });
     } catch (e) { setMsg({ tone: "err", text: e instanceof Error ? e.message : "Failed." }); }
     setBusy(false);
   }
@@ -127,6 +160,7 @@ export function Publish() {
       )}
       <div className="stack-lg panel form-panel">
         <label className="field"><span className="field-label">Title</span><input maxLength={120} value={f.title} onChange={set("title")} placeholder="Quote our launch post" /></label>
+        <label className="field"><span className="field-label">X post to quote</span><input value={f.postUrl} onChange={set("postUrl")} placeholder="https://x.com/you/status/… (can be set later)" /></label>
         <div className="field-row two">
           <label className="field"><span className="field-label">Mode</span>
             <select value={f.mode} onChange={set("mode")}><option value="FCFS">First come</option><option value="RANDOM">Random</option></select></label>
@@ -155,7 +189,7 @@ export function Publish() {
         </div>
         <label className="field"><span className="field-label">Duration (days)</span><input inputMode="numeric" value={f.durationDays} onChange={set("durationDays")} /></label>
         {unit > 0 && budgetN > 0 && !formError && <p className="small muted">{isRandom ? `The largest tier (${unit}) is held for each pending claim. ` : ""}Your budget covers {coveredClaims.toLocaleString()} of {Number(f.maxClaims).toLocaleString()} claims.</p>}
-        <p className="small muted">You can add the X post claimers must quote after publishing, from your quest page (Manage → Set X post). Claims open once it's set.</p>
+        <p className="small muted">Enter the X post claimers must quote above — it is saved with the quest, and claims open once it's set. You can also add or change it later from your quest page (Manage → Set X post).</p>
 
         <section className="stack" aria-labelledby="optional-tasks-heading">
           <div className="row-wrap"><h2 id="optional-tasks-heading" className="section-label">Optional X tasks</h2><button type="button" className="btn btn-sm btn-secondary" disabled={tasks.length >= 10} onClick={() => setTasks([...tasks, { type: "follow", target: "", requiredText: "" }])}>Add task</button></div>
